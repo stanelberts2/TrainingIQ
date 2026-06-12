@@ -1,0 +1,29 @@
+{
+  "name": "trainiq-prototype",
+  "version": "1.0.0",
+  "description": "Persoonlijke trainingshub voor workouts, basisanalyse en Supabase-sync.",
+  "main": "app.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stanelberts2/TrainingIQ.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/stanelberts2/TrainingIQ/issues"
+  },
+  "homepage": "https://github.com/stanelberts2/TrainingIQ#readme",
+  "devDependencies": {
+    "vite": "^8.0.11"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4"
+  }
+}

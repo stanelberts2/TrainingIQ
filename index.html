@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="TrainIQ is een persoonlijk trainingsdashboard voor workouts, zones en progressie."
+    />
+    <meta name="theme-color" content="#f6f7f8" />
+    <title>TrainIQ</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#dashboard" aria-label="TrainIQ dashboard">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>
+            <strong>TrainIQ</strong>
+            <small>Personal training hub</small>
+          </span>
+        </a>
+
+        <nav class="nav-list" aria-label="Hoofdnavigatie">
+          <button class="nav-item is-active" type="button" data-view="dashboard">Dashboard</button>
+          <button class="nav-item" type="button" data-view="workouts">Workouts</button>
+          <button class="nav-item" type="button" data-view="analysis">Analyse</button>
+          <button class="nav-item" type="button" data-view="data">Data</button>
+        </nav>
+
+        <section class="sync-card" aria-label="Data status">
+          <span class="status-dot" id="syncDot" aria-hidden="true"></span>
+          <p>Databasis</p>
+          <strong id="syncTitle">Lokale basis actief</strong>
+          <small id="syncText">Supabase en Strava worden de volgende stap.</small>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Basis eerst</p>
+            <h1>Een helder logboek voor alles wat je traint.</h1>
+          </div>
+          <button class="ghost-button" id="seedButton" type="button">Voorbeelddata herstellen</button>
+        </header>
+
+        <section class="view is-visible" id="dashboard" aria-label="Dashboard">
+          <div class="metrics-grid">
+            <article class="metric-card">
+              <span>Trainingen</span>
+              <strong id="totalWorkouts">0</strong>
+              <small id="totalWorkoutsMeta">Nog geen data</small>
+            </article>
+            <article class="metric-card">
+              <span>Totale duur</span>
+              <strong id="totalDuration">0u</strong>
+              <small>Alle sporten samen</small>
+            </article>
+            <article class="metric-card">
+              <span>Gem. load</span>
+              <strong id="avgLoad">0</strong>
+              <small>Trainingsbelasting per sessie</small>
+            </article>
+            <article class="metric-card">
+              <span>Focus</span>
+              <strong id="focusSport">-</strong>
+              <small id="focusSportMeta">Meest getrainde sport</small>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Laatste training</p>
+                  <h2 id="latestTitle">Nog geen workout</h2>
+                </div>
+              </div>
+              <div id="latestWorkout" class="detail-list"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Sportverdeling</p>
+                  <h2>Waar je tijd naartoe gaat</h2>
+                </div>
+              </div>
+              <div id="sportDistribution" class="bar-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="workouts" aria-label="Workouts">
+          <div class="workouts-layout">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Workout toevoegen</p>
+                  <h2>Nieuwe training</h2>
+                </div>
+              </div>
+              <form class="workout-form" id="workoutForm">
+                <label>
+                  Datum
+                  <span class="date-field">
+                    <input name="date" type="date" required />
+                    <button class="icon-button" id="calendarToggle" type="button" aria-label="Open kalender">
+                      <span class="calendar-glyph" aria-hidden="true"></span>
+                    </button>
+                  </span>
+                </label>
+                <div class="calendar-popover" id="calendarPopover" hidden>
+                  <div class="calendar-header">
+                    <button class="icon-button" id="prevMonthButton" type="button" aria-label="Vorige maand">&lt;</button>
+                    <strong id="calendarMonthLabel">Maand</strong>
+                    <button class="icon-button" id="nextMonthButton" type="button" aria-label="Volgende maand">&gt;</button>
+                  </div>
+                  <div class="weekday-grid" aria-hidden="true">
+                    <span>Ma</span>
+                    <span>Di</span>
+                    <span>Wo</span>
+                    <span>Do</span>
+                    <span>Vr</span>
+                    <span>Za</span>
+                    <span>Zo</span>
+                  </div>
+                  <div class="calendar-grid" id="calendarGrid"></div>
+                  <div class="agenda-panel">
+                    <p class="panel-label">Agenda</p>
+                    <h3 id="agendaTitle">Geselecteerde dag</h3>
+                    <div id="agendaList" class="agenda-list"></div>
+                  </div>
+                </div>
+                <label>
+                  Sport
+                  <select name="sport" required>
+                    <option value="running">Hardlopen</option>
+                    <option value="hyrox">Hyrox</option>
+                    <option value="strength">Kracht</option>
+                    <option value="cycling">Fietsen</option>
+                  </select>
+                </label>
+                <label>
+                  Titel
+                  <input name="title" placeholder="Bijv. 5 x 1 km drempel" required />
+                </label>
+                <label>
+                  Type
+                  <input name="workoutType" placeholder="threshold, endurance, legday..." required />
+                </label>
+                <div class="form-row">
+                  <label>
+                    Duur min
+                    <input name="durationMin" type="number" min="1" step="1" required />
+                  </label>
+                  <label>
+                    Afstand km
+                    <input name="distanceKm" type="number" min="0" step="0.01" />
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>
+                    Gem. HR
+                    <input name="avgHr" type="number" min="0" step="1" />
+                  </label>
+                  <label>
+                    Load
+                    <input name="load" type="number" min="0" step="1" />
+                  </label>
+                </div>
+                <label>
+                  Notitie / doel
+                  <textarea name="notes" rows="3" placeholder="Wat was het doel of hoe voelde dit?"></textarea>
+                </label>
+                <button class="primary-button" type="submit">Training opslaan</button>
+              </form>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Logboek</p>
+                  <h2>Workouts</h2>
+                </div>
+                <select id="sportFilter" aria-label="Filter op sport">
+                  <option value="all">Alle sporten</option>
+                  <option value="running">Hardlopen</option>
+                  <option value="hyrox">Hyrox</option>
+                  <option value="strength">Kracht</option>
+                  <option value="cycling">Fietsen</option>
+                </select>
+              </div>
+              <div id="workoutList" class="workout-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="analysis" aria-label="Analyse">
+          <div class="content-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Eerste analysefunctie</p>
+                  <h2>Vergelijk vergelijkbare trainingen</h2>
+                </div>
+                <select id="analysisWorkoutSelect" aria-label="Kies training"></select>
+              </div>
+              <div id="analysisSummary" class="analysis-summary"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Progressie</p>
+                  <h2>Tempo, hartslag en load</h2>
+                </div>
+              </div>
+              <div id="comparisonTable" class="comparison-table"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="data" aria-label="Data">
+          <div class="content-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Supabase sync</p>
+                  <h2>Cloud-opslag activeren</h2>
+                </div>
+                <span class="status-pill" id="supabaseStatusBadge">Niet gekoppeld</span>
+              </div>
+              <form class="workout-form" id="supabaseConfigForm">
+                <label>
+                  Supabase URL
+                  <input id="supabaseUrlInput" name="supabaseUrl" placeholder="https://your-project-ref.supabase.co" />
+                </label>
+                <label>
+                  Supabase anon key
+                  <input id="supabaseAnonKeyInput" name="supabaseAnonKey" type="password" placeholder="eyJ..." />
+                </label>
+                <button class="ghost-button full-width" type="submit">Config opslaan</button>
+              </form>
+
+              <div class="sync-actions">
+                <label>
+                  E-mail login
+                  <input id="supabaseEmailInput" name="supabaseEmail" type="email" placeholder="jij@example.com" />
+                </label>
+                <div class="button-row">
+                  <button class="primary-button" id="supabaseLoginButton" type="button">Magic link sturen</button>
+                  <button class="ghost-button" id="supabaseSignOutButton" type="button">Uitloggen</button>
+                </div>
+                <div class="button-row">
+                  <button class="primary-button" id="supabaseUploadButton" type="button">Lokale workouts uploaden</button>
+                  <button class="ghost-button" id="supabaseDownloadButton" type="button">Cloud workouts ophalen</button>
+                </div>
+              </div>
+
+              <div id="supabaseStatus" class="import-status"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">CSV fallback</p>
+                  <h2>Data binnenhalen zonder koppeling</h2>
+                </div>
+              </div>
+              <form class="workout-form" id="csvForm">
+                <label>
+                  CSV bestand
+                  <input id="csvInput" type="file" accept=".csv,text/csv" />
+                </label>
+                <p class="help-text">Kolommen: date, sport, title, workoutType, durationMin, distanceKm, avgHr, load, notes.</p>
+              </form>
+              <div id="importStatus" class="import-status"></div>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Import strategie</p>
+                  <h2>De volgorde die nu klopt</h2>
+                </div>
+              </div>
+              <ol class="roadmap-list">
+                <li>
+                  <strong>Nu:</strong>
+                  betrouwbaar workout-logboek en vergelijkingsanalyse.
+                </li>
+                <li>
+                  <strong>Nu ook:</strong>
+                  Supabase Auth + handmatige cloud-sync.
+                </li>
+                <li>
+                  <strong>Daarna:</strong>
+                  Strava OAuth, activities importeren en periodiek syncen.
+                </li>
+                <li>
+                  <strong>Later:</strong>
+                  Garmin via Strava, FIT/CSV export of officiele API als dat haalbaar is.
+                </li>
+              </ol>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
