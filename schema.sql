@@ -76,11 +76,15 @@ create table if not exists detected_intervals (
   duration_seconds numeric not null default 0,
   distance_meters numeric not null default 0,
   avg_hr integer not null default 0,
+  max_hr integer not null default 0,
   avg_pace text not null default '',
   confidence numeric not null default 0,
   notes text not null default '',
   unique (workout_id, interval_index)
 );
+
+alter table detected_intervals
+  add column if not exists max_hr integer not null default 0;
 
 create index if not exists workouts_user_date_idx on workouts (user_id, date desc);
 create index if not exists workouts_user_type_idx on workouts (user_id, sport, workout_type, date desc);

@@ -12,7 +12,7 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - Intervalanalyse voor trainingen zoals 5 x 1 km: pace, tijd en hartslag per blok.
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.
 - Supabase-voorbereiding in `schema.sql`, `data/supabaseWorkoutMapper.js` en `data/supabaseWorkoutStore.js`.
-- Handmatige Supabase-sync via de Data-tab: magic-link login, lokale workouts uploaden en cloud-workouts ophalen.
+- Handmatige Supabase-sync via de Data-tab: magic-link login, lokale workouts plus intervalblokken uploaden en cloud-workouts ophalen.
 
 ## Lokaal draaien
 
@@ -82,7 +82,7 @@ CSV-import gebruikt dezelfde namen. Oude CSV's met `label` blijven werken; die w
 6. Stuur een magic link naar je e-mailadres en open die link.
 7. Gebruik daarna `Lokale workouts uploaden` of `Cloud workouts ophalen`.
 
-De app blijft localStorage gebruiken als lokale cache. Supabase-sync is voorlopig handmatig, zodat de basis controleerbaar blijft.
+De app blijft localStorage gebruiken als lokale cache. Supabase-sync is voorlopig handmatig, zodat de basis controleerbaar blijft. Workouts worden opgeslagen in `workouts`; intervalblokken worden opgeslagen in `workout_laps`.
 
 Voor de volgende werksessie staat een concreet stappenplan in `NEXT_STEPS.md`.
 

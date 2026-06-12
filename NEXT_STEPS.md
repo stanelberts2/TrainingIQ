@@ -52,7 +52,7 @@ Na deze stap staat de basis-sync:
 
 - workouts blijven lokaal bruikbaar;
 - workouts kunnen naar Supabase;
-- intervalblokken blijven voorlopig bewaard via `raw_payload.intervals`;
+- intervalblokken worden opgeslagen in `workout_laps`;
 - dezelfde data kan later op telefoon geladen worden;
 - Strava-import kan daarna bovenop deze basis gebouwd worden.
 

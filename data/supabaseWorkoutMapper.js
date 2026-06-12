@@ -28,7 +28,24 @@ export function workoutToSupabaseRow(workout, userId) {
   };
 }
 
+export function intervalToSupabaseLapRow(interval, workoutId) {
+  return {
+    workout_id: workoutId,
+    lap_index: interval.intervalIndex,
+    name: interval.name,
+    start_offset_seconds: interval.startOffsetSeconds || 0,
+    duration_seconds: interval.durationSeconds,
+    distance_meters: interval.distanceMeters,
+    avg_hr: interval.avgHr,
+    max_hr: interval.maxHr,
+    avg_pace: interval.avgPace,
+    raw_payload: interval.rawPayload || {},
+  };
+}
+
 export function workoutFromSupabaseRow(row) {
+  const lapIntervals = intervalsFromSupabaseLapRows(row.workout_laps);
+
   return normalizeWorkout({
     id: row.id,
     source: row.source,
@@ -45,7 +62,7 @@ export function workoutFromSupabaseRow(row) {
     load: row.load,
     avgPace: row.avg_pace,
     elevationGain: row.elevation_gain,
-    intervals: row.raw_payload?.intervals || [],
+    intervals: lapIntervals.length ? lapIntervals : row.raw_payload?.intervals || [],
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -54,4 +71,22 @@ export function workoutFromSupabaseRow(row) {
 
 export function workoutsFromSupabaseRows(rows = []) {
   return rows.map((row) => workoutFromSupabaseRow(row));
+}
+
+export function intervalsFromSupabaseLapRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .sort((a, b) => a.lap_index - b.lap_index)
+    .map((row) => ({
+      intervalIndex: row.lap_index,
+      name: row.name,
+      startOffsetSeconds: row.start_offset_seconds,
+      durationSeconds: row.duration_seconds,
+      distanceMeters: row.distance_meters,
+      avgHr: row.avg_hr,
+      maxHr: row.max_hr,
+      avgPace: row.avg_pace,
+      rawPayload: row.raw_payload || {},
+    }));
 }

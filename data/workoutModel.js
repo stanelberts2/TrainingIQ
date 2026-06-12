@@ -245,11 +245,13 @@ function normalizeIntervals(intervals = []) {
       return {
         intervalIndex: numberOrZero(interval.intervalIndex ?? interval.interval_index ?? interval.lapIndex ?? interval.lap_index) || index + 1,
         name: String(interval.name || interval.label || `Interval ${index + 1}`).trim(),
+        startOffsetSeconds: numberOrZero(interval.startOffsetSeconds ?? interval.start_offset_seconds),
         durationSeconds: normalizeDurationSeconds(interval.durationSeconds ?? interval.duration_seconds ?? interval.durationText),
         distanceMeters: numberOrZero(interval.distanceMeters ?? interval.distance_meters) || Math.round(distanceKm * 1000),
         avgHr: numberOrZero(interval.avgHr ?? interval.avg_hr),
         maxHr: numberOrZero(interval.maxHr ?? interval.max_hr),
         avgPace: String(interval.avgPace || interval.avg_pace || ""),
+        rawPayload: interval.rawPayload || interval.raw_payload || {},
       };
     })
     .filter((interval) => {
