@@ -68,6 +68,8 @@ CSV-import gebruikt dezelfde namen. Oude CSV's met `label` blijven werken; die w
 
 De app blijft localStorage gebruiken als lokale cache. Supabase-sync is voorlopig handmatig, zodat de basis controleerbaar blijft.
 
+Voor de volgende werksessie staat een concreet stappenplan in `NEXT_STEPS.md`.
+
 ## Persoonlijke Deploy
 
 Aanbevolen setup voor gebruik op MacBook en telefoon:
