@@ -6,7 +6,7 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 
 - Dashboard met kerncijfers voor opgeslagen workouts.
 - Workout-logboek met sportfilter.
-- Handmatige workout-invoer met kalender/agenda.
+- Handmatige workout-invoer met kalender/agenda en de V1-velden voor tijd, afstand, pace, hartslag, load en hoogtemeters.
 - CSV-import als fallback voor Google Sheets.
 - Eerste analyse: vergelijk trainingen met dezelfde sport en hetzelfde type.
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.

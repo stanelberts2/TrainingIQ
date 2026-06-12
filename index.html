@@ -152,6 +152,10 @@
                   Type
                   <input name="workoutType" placeholder="threshold, endurance, legday..." required />
                 </label>
+                <label>
+                  Starttijd
+                  <input name="startTime" type="time" />
+                </label>
                 <div class="form-row">
                   <label>
                     Duur min
@@ -168,10 +172,32 @@
                     <input name="avgHr" type="number" min="0" step="1" />
                   </label>
                   <label>
+                    Max HR
+                    <input name="maxHr" type="number" min="0" step="1" />
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>
                     Load
                     <input name="load" type="number" min="0" step="1" />
                   </label>
+                  <label>
+                    Hoogtemeters
+                    <input name="elevationGain" type="number" min="0" step="1" />
+                  </label>
                 </div>
+                <label>
+                  Gem. pace
+                  <input name="avgPace" placeholder="Bijv. 4:35/km" />
+                </label>
+                <label>
+                  Bron ID
+                  <input name="externalId" placeholder="Later automatisch via Strava/Garmin" readonly />
+                </label>
+                <label>
+                  Bron
+                  <input name="source" value="manual" readonly />
+                </label>
                 <label>
                   Notitie / doel
                   <textarea name="notes" rows="3" placeholder="Wat was het doel of hoe voelde dit?"></textarea>
@@ -276,7 +302,7 @@
                   CSV bestand
                   <input id="csvInput" type="file" accept=".csv,text/csv" />
                 </label>
-                <p class="help-text">Kolommen: date, sport, title, workoutType, durationMin, distanceKm, avgHr, load, notes.</p>
+                <p class="help-text">Kolommen: date, startTime, sport, title, workoutType, durationMin, distanceKm, avgHr, maxHr, load, avgPace, elevationGain, notes.</p>
               </form>
               <div id="importStatus" class="import-status"></div>
             </article>

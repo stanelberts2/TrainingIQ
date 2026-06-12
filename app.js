@@ -88,6 +88,7 @@ function formatDuration(minutes) {
 }
 
 function paceForWorkout(workout) {
+  if (workout.avgPace) return workout.avgPace;
   if (!workout.distanceKm || !workout.durationMin) return "-";
   const secondsPerKm = Math.round((workout.durationMin * 60) / workout.distanceKm);
   const minutes = Math.floor(secondsPerKm / 60);
@@ -132,9 +133,13 @@ function renderDashboard() {
     els.latestTitle.textContent = latest.title;
     els.latestWorkout.innerHTML = [
       detailRow("Datum", formatDate(latest.date)),
+      detailRow("Starttijd", latest.startTime || "-"),
       detailRow("Sport", sportLabels[latest.sport]),
       detailRow("Tempo", paceForWorkout(latest)),
+      detailRow("Gem. HR", latest.avgHr || "-"),
+      detailRow("Max HR", latest.maxHr || "-"),
       detailRow("Load", latest.load || "-"),
+      detailRow("Hoogtemeters", latest.elevationGain ? `${latest.elevationGain} m` : "-"),
       detailRow("Notitie", latest.notes || "-"),
     ].join("");
   }
@@ -185,7 +190,7 @@ function renderWorkoutList() {
       <button class="workout-item ${workout.id === state.selectedWorkoutId ? "is-selected" : ""}" type="button" data-workout-id="${workout.id}">
         <strong>${workout.title}</strong>
         <span>${formatDate(workout.date)} · ${sportLabels[workout.sport]} · ${workout.workoutType}</span>
-        <span>${formatDuration(numberOrZero(workout.durationMin))} · ${paceForWorkout(workout)} · load ${workout.load || "-"}</span>
+        <span>${formatDuration(numberOrZero(workout.durationMin))} · ${paceForWorkout(workout)} · HR ${workout.avgHr || "-"} / ${workout.maxHr || "-"} · load ${workout.load || "-"}</span>
       </button>
     `)
     .join("");
@@ -295,7 +300,7 @@ function renderAnalysis() {
         <strong>${formatDate(workout.date)}</strong>
         <span>${workout.title}</span>
         <span>${paceForWorkout(workout)}</span>
-        <span>HR ${workout.avgHr || "-"}</span>
+        <span>HR ${workout.avgHr || "-"} / ${workout.maxHr || "-"}</span>
         <span>Load ${workout.load || "-"}</span>
       </div>
     `)

@@ -137,11 +137,14 @@ export function normalizeManualWorkout(formData) {
     sport: formData.get("sport"),
     title: formData.get("title"),
     workoutType: formData.get("workoutType") || formData.get("label"),
+    startTime: formData.get("startTime"),
     durationMin: formData.get("durationMin"),
     distanceKm: formData.get("distanceKm"),
     avgHr: formData.get("avgHr"),
     maxHr: formData.get("maxHr"),
     load: formData.get("load"),
+    avgPace: formData.get("avgPace"),
+    elevationGain: formData.get("elevationGain"),
     notes: formData.get("notes"),
   });
 }

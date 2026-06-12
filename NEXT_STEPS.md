@@ -7,6 +7,7 @@ Dit is het startpunt voor de volgende sessie.
 - GitHub staat goed en is schoon gepusht naar `stanelberts2/TrainingIQ`.
 - De app draait lokaal als statische ES-module app.
 - Workouts worden nu lokaal bewaard in `localStorage`.
+- De handmatige invoer bevat nu de V1-velden: datum, starttijd, sport, titel, type, duur, afstand, gemiddelde HR, max HR, load, pace, hoogtemeters en notities.
 - Supabase is voorbereid met:
   - `schema.sql`
   - `lib/supabase.js`
