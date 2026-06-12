@@ -9,6 +9,7 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - Handmatige workout-invoer met kalender/agenda en de V1-velden voor tijd, afstand, pace, hartslag, load en hoogtemeters.
 - CSV-import als fallback voor Google Sheets.
 - Eerste analyse: vergelijk trainingen met dezelfde sport en hetzelfde type.
+- Intervalanalyse voor trainingen zoals 5 x 1 km: pace, tijd en hartslag per blok.
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.
 - Supabase-voorbereiding in `schema.sql`, `data/supabaseWorkoutMapper.js` en `data/supabaseWorkoutStore.js`.
 - Handmatige Supabase-sync via de Data-tab: magic-link login, lokale workouts uploaden en cloud-workouts ophalen.
@@ -48,6 +49,7 @@ De app gebruikt intern camelCase:
   load,
   avgPace,
   elevationGain,
+  intervals,
   notes,
   createdAt,
   updatedAt
@@ -55,6 +57,20 @@ De app gebruikt intern camelCase:
 ```
 
 CSV-import gebruikt dezelfde namen. Oude CSV's met `label` blijven werken; die worden omgezet naar `workoutType`.
+
+`intervals` is een array met blokken:
+
+```js
+{
+  intervalIndex,
+  name,
+  durationSeconds,
+  distanceMeters,
+  avgHr,
+  maxHr,
+  avgPace
+}
+```
 
 ## Supabase
 

@@ -24,6 +24,14 @@ export const seedWorkouts = [
     load: 86,
     avgPace: "",
     elevationGain: 0,
+    intervals: [
+      { intervalIndex: 1, name: "1 km", durationSeconds: 236, distanceMeters: 1000, avgHr: 158, maxHr: 166, avgPace: "3:56/km" },
+      { intervalIndex: 2, name: "1 km", durationSeconds: 235, distanceMeters: 1000, avgHr: 162, maxHr: 170, avgPace: "3:55/km" },
+      { intervalIndex: 3, name: "1 km", durationSeconds: 237, distanceMeters: 1000, avgHr: 164, maxHr: 172, avgPace: "3:57/km" },
+      { intervalIndex: 4, name: "1 km", durationSeconds: 238, distanceMeters: 1000, avgHr: 166, maxHr: 174, avgPace: "3:58/km" },
+      { intervalIndex: 5, name: "1 km", durationSeconds: 239, distanceMeters: 1000, avgHr: 168, maxHr: 176, avgPace: "3:59/km" },
+      { intervalIndex: 6, name: "1 km", durationSeconds: 240, distanceMeters: 1000, avgHr: 169, maxHr: 178, avgPace: "4:00/km" },
+    ],
     notes: "Stabiel tempo, lichte hartslagdrift in de laatste twee herhalingen.",
   },
   {
@@ -42,6 +50,13 @@ export const seedWorkouts = [
     load: 79,
     avgPace: "",
     elevationGain: 0,
+    intervals: [
+      { intervalIndex: 1, name: "1 km", durationSeconds: 244, distanceMeters: 1000, avgHr: 162, maxHr: 170, avgPace: "4:04/km" },
+      { intervalIndex: 2, name: "1 km", durationSeconds: 242, distanceMeters: 1000, avgHr: 166, maxHr: 174, avgPace: "4:02/km" },
+      { intervalIndex: 3, name: "1 km", durationSeconds: 243, distanceMeters: 1000, avgHr: 169, maxHr: 177, avgPace: "4:03/km" },
+      { intervalIndex: 4, name: "1 km", durationSeconds: 245, distanceMeters: 1000, avgHr: 171, maxHr: 179, avgPace: "4:05/km" },
+      { intervalIndex: 5, name: "1 km", durationSeconds: 247, distanceMeters: 1000, avgHr: 173, maxHr: 181, avgPace: "4:07/km" },
+    ],
     notes: "Zelfde type prikkel, maar duurder qua hartslag.",
   },
   {
@@ -60,6 +75,7 @@ export const seedWorkouts = [
     load: 104,
     avgPace: "",
     elevationGain: 0,
+    intervals: [],
     notes: "Stations technisch houden, runs gecontroleerd.",
   },
   {
@@ -78,6 +94,7 @@ export const seedWorkouts = [
     load: 48,
     avgPace: "",
     elevationGain: 0,
+    intervals: [],
     notes: "Krachtprikkel zonder tot falen te gaan.",
   },
   {
@@ -96,6 +113,7 @@ export const seedWorkouts = [
     load: 72,
     avgPace: "",
     elevationGain: 0,
+    intervals: [],
     notes: "Rustige duurprikkel met lage intensiteit.",
   },
 ];
@@ -120,6 +138,7 @@ export function normalizeWorkout(input = {}) {
     load: numberOrZero(input.load ?? input.trainingLoad ?? input.training_load),
     avgPace: String(input.avgPace || input.avg_pace || ""),
     elevationGain: numberOrZero(input.elevationGain ?? input.elevation_gain),
+    intervals: normalizeIntervals(input.intervals || input.laps || input.workout_laps || []),
     notes: String(input.notes || input.description || ""),
     createdAt: String(input.createdAt || input.created_at || now),
     updatedAt: String(input.updatedAt || input.updated_at || now),
@@ -131,6 +150,20 @@ export function normalizeWorkouts(workouts = []) {
 }
 
 export function normalizeManualWorkout(formData) {
+  const intervals = formData.getAll("intervalName")
+    .map((name, index) => ({
+      intervalIndex: index + 1,
+      name,
+      durationText: formData.getAll("intervalDuration")[index],
+      distanceKm: formData.getAll("intervalDistanceKm")[index],
+      avgHr: formData.getAll("intervalAvgHr")[index],
+      maxHr: formData.getAll("intervalMaxHr")[index],
+      avgPace: formData.getAll("intervalAvgPace")[index],
+    }))
+    .filter((interval) => {
+      return interval.name || interval.durationText || interval.distanceKm || interval.avgHr || interval.maxHr || interval.avgPace;
+    });
+
   return normalizeWorkout({
     source: "manual",
     date: formData.get("date"),
@@ -145,6 +178,7 @@ export function normalizeManualWorkout(formData) {
     load: formData.get("load"),
     avgPace: formData.get("avgPace"),
     elevationGain: formData.get("elevationGain"),
+    intervals,
     notes: formData.get("notes"),
   });
 }
@@ -166,6 +200,7 @@ export function normalizeCsvWorkout(record = {}) {
     load: record.load || record.trainingLoad || record.training_load,
     avgPace: record.avgPace || record.avg_pace,
     elevationGain: record.elevationGain || record.elevation_gain,
+    intervals: parseIntervals(record.intervals || record.laps || record.workout_laps),
     notes: record.notes,
   });
 }
@@ -199,4 +234,51 @@ function createWorkoutId(source) {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizeIntervals(intervals = []) {
+  if (!Array.isArray(intervals)) return [];
+
+  return intervals
+    .map((interval, index) => {
+      const distanceKm = numberOrZero(interval.distanceKm ?? interval.distance_km);
+      return {
+        intervalIndex: numberOrZero(interval.intervalIndex ?? interval.interval_index ?? interval.lapIndex ?? interval.lap_index) || index + 1,
+        name: String(interval.name || interval.label || `Interval ${index + 1}`).trim(),
+        durationSeconds: normalizeDurationSeconds(interval.durationSeconds ?? interval.duration_seconds ?? interval.durationText),
+        distanceMeters: numberOrZero(interval.distanceMeters ?? interval.distance_meters) || Math.round(distanceKm * 1000),
+        avgHr: numberOrZero(interval.avgHr ?? interval.avg_hr),
+        maxHr: numberOrZero(interval.maxHr ?? interval.max_hr),
+        avgPace: String(interval.avgPace || interval.avg_pace || ""),
+      };
+    })
+    .filter((interval) => {
+      return interval.name || interval.durationSeconds || interval.distanceMeters || interval.avgHr || interval.maxHr || interval.avgPace;
+    });
+}
+
+function normalizeDurationSeconds(value) {
+  if (typeof value === "string" && value.includes(":")) {
+    const parts = value.split(":").map(Number);
+    if (parts.length === 2 && parts.every(Number.isFinite)) {
+      return parts[0] * 60 + parts[1];
+    }
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+  }
+
+  return numberOrZero(value);
+}
+
+function parseIntervals(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }

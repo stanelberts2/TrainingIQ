@@ -8,6 +8,7 @@ Dit is het startpunt voor de volgende sessie.
 - De app draait lokaal als statische ES-module app.
 - Workouts worden nu lokaal bewaard in `localStorage`.
 - De handmatige invoer bevat nu de V1-velden: datum, starttijd, sport, titel, type, duur, afstand, gemiddelde HR, max HR, load, pace, hoogtemeters en notities.
+- Intervalblokken zijn toegevoegd voor trainingen zoals 5 x 1 km, inclusief afstand, tijd, pace, gemiddelde HR en max HR per blok.
 - Supabase is voorbereid met:
   - `schema.sql`
   - `lib/supabase.js`
@@ -51,6 +52,7 @@ Na deze stap staat de basis-sync:
 
 - workouts blijven lokaal bruikbaar;
 - workouts kunnen naar Supabase;
+- intervalblokken blijven voorlopig bewaard via `raw_payload.intervals`;
 - dezelfde data kan later op telefoon geladen worden;
 - Strava-import kan daarna bovenop deze basis gebouwd worden.
 

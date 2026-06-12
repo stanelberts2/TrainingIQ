@@ -34,6 +34,8 @@ const els = {
   latestWorkout: document.querySelector("#latestWorkout"),
   sportDistribution: document.querySelector("#sportDistribution"),
   workoutForm: document.querySelector("#workoutForm"),
+  addIntervalButton: document.querySelector("#addIntervalButton"),
+  intervalRows: document.querySelector("#intervalRows"),
   calendarToggle: document.querySelector("#calendarToggle"),
   calendarPopover: document.querySelector("#calendarPopover"),
   prevMonthButton: document.querySelector("#prevMonthButton"),
@@ -47,6 +49,7 @@ const els = {
   analysisWorkoutSelect: document.querySelector("#analysisWorkoutSelect"),
   analysisSummary: document.querySelector("#analysisSummary"),
   comparisonTable: document.querySelector("#comparisonTable"),
+  intervalComparison: document.querySelector("#intervalComparison"),
   csvInput: document.querySelector("#csvInput"),
   importStatus: document.querySelector("#importStatus"),
   supabaseConfigForm: document.querySelector("#supabaseConfigForm"),
@@ -94,6 +97,22 @@ function paceForWorkout(workout) {
   const minutes = Math.floor(secondsPerKm / 60);
   const seconds = String(secondsPerKm % 60).padStart(2, "0");
   return `${minutes}:${seconds}/km`;
+}
+
+function formatSeconds(seconds) {
+  const totalSeconds = Math.round(numberOrZero(seconds));
+  if (!totalSeconds) return "-";
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const rest = String(totalSeconds % 60).padStart(2, "0");
+  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+}
+
+function paceForInterval(interval) {
+  if (interval.avgPace) return interval.avgPace;
+  if (!interval.durationSeconds || !interval.distanceMeters) return "-";
+  const secondsPerKm = Math.round(interval.durationSeconds / (interval.distanceMeters / 1000));
+  return `${Math.floor(secondsPerKm / 60)}:${String(secondsPerKm % 60).padStart(2, "0")}/km`;
 }
 
 function toDateKey(date) {
@@ -261,6 +280,7 @@ function renderAnalysis() {
   if (!selected) {
     els.analysisSummary.innerHTML = `<p class="empty-state">Voeg workouts toe om te vergelijken.</p>`;
     els.comparisonTable.innerHTML = "";
+    els.intervalComparison.innerHTML = "";
     return;
   }
 
@@ -305,6 +325,8 @@ function renderAnalysis() {
       </div>
     `)
     .join("");
+
+  renderIntervalComparison(selected, previous);
 }
 
 function average(values) {
@@ -314,6 +336,72 @@ function average(values) {
 
 function detailRow(label, value) {
   return `<div class="detail-row"><strong>${label}</strong><span>${value}</span></div>`;
+}
+
+function renderIntervalComparison(selected, previous) {
+  const intervals = selected.intervals || [];
+
+  if (!intervals.length) {
+    els.intervalComparison.innerHTML = `<p class="empty-state">Deze training heeft nog geen intervalblokken. Voeg bij een 5x1km-training de losse kilometers toe om blok voor blok te vergelijken.</p>`;
+    return;
+  }
+
+  const previousWithIntervals = previous.filter((workout) => workout.intervals?.length);
+  els.intervalComparison.innerHTML = `
+    <div class="interval-table">
+      <div class="interval-table-row interval-table-head">
+        <strong>Blok</strong>
+        <strong>Afstand</strong>
+        <strong>Tijd</strong>
+        <strong>Pace</strong>
+        <strong>HR</strong>
+        <strong>Vorige gem.</strong>
+      </div>
+      ${intervals.map((interval, index) => {
+        const previousMatches = previousWithIntervals
+          .map((workout) => workout.intervals[index])
+          .filter(Boolean);
+        const previousAvgHr = average(previousMatches.map((item) => numberOrZero(item.avgHr)));
+        const previousPace = average(previousMatches.map((item) => numberOrZero(item.durationSeconds)));
+        const distanceKm = interval.distanceMeters ? (interval.distanceMeters / 1000).toFixed(2) : "-";
+
+        return `
+          <div class="interval-table-row">
+            <span>${interval.name || `Blok ${interval.intervalIndex}`}</span>
+            <span>${distanceKm === "-" ? "-" : `${distanceKm} km`}</span>
+            <span>${formatSeconds(interval.durationSeconds)}</span>
+            <span>${paceForInterval(interval)}</span>
+            <span>${interval.avgHr || "-"} / ${interval.maxHr || "-"}</span>
+            <span>${previousMatches.length ? `${formatSeconds(previousPace)} · HR ${Math.round(previousAvgHr) || "-"}` : "-"}</span>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function createIntervalRow(index = 1) {
+  const row = document.createElement("div");
+  row.className = "interval-row";
+  row.innerHTML = `
+    <input name="intervalName" placeholder="${index} km" aria-label="Intervalnaam" />
+    <input name="intervalDistanceKm" type="number" min="0" step="0.01" placeholder="1.00" aria-label="Intervalafstand kilometer" />
+    <input name="intervalDuration" placeholder="3:55" aria-label="Intervaltijd" />
+    <input name="intervalAvgPace" placeholder="3:55/km" aria-label="Intervalpace" />
+    <input name="intervalAvgHr" type="number" min="0" step="1" placeholder="160" aria-label="Interval gemiddelde hartslag" />
+    <input name="intervalMaxHr" type="number" min="0" step="1" placeholder="172" aria-label="Interval maximale hartslag" />
+    <button class="icon-button remove-interval-button" type="button" aria-label="Verwijder interval">x</button>
+  `;
+  return row;
+}
+
+function addIntervalRow() {
+  els.intervalRows.append(createIntervalRow(els.intervalRows.children.length + 1));
+}
+
+function resetIntervalRows() {
+  els.intervalRows.innerHTML = "";
+  addIntervalRow();
 }
 
 function getSupabaseConfig() {
@@ -518,6 +606,19 @@ function bindEvents() {
     addWorkout(new FormData(event.currentTarget));
     event.currentTarget.reset();
     els.workoutForm.elements.date.value = selectedDate;
+    resetIntervalRows();
+  });
+
+  els.addIntervalButton.addEventListener("click", () => {
+    addIntervalRow();
+  });
+
+  els.intervalRows.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".remove-interval-button");
+    if (!removeButton) return;
+
+    removeButton.closest(".interval-row").remove();
+    if (!els.intervalRows.children.length) resetIntervalRows();
   });
 
   els.calendarToggle.addEventListener("click", () => {
@@ -610,6 +711,7 @@ function init() {
   state.selectedDate = today;
   state.calendarMonth = dateFromKey(today);
   state.selectedWorkoutId = sortedWorkouts()[0]?.id || null;
+  resetIntervalRows();
   bindEvents();
   renderSupabaseConfig();
   refreshSupabaseUser();

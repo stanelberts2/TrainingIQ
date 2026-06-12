@@ -21,6 +21,9 @@ export function workoutToSupabaseRow(workout, userId) {
     avg_pace: normalized.avgPace,
     elevation_gain: normalized.elevationGain,
     notes: normalized.notes,
+    raw_payload: {
+      intervals: normalized.intervals,
+    },
     updated_at: normalized.updatedAt,
   };
 }
@@ -42,6 +45,7 @@ export function workoutFromSupabaseRow(row) {
     load: row.load,
     avgPace: row.avg_pace,
     elevationGain: row.elevation_gain,
+    intervals: row.raw_payload?.intervals || [],
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

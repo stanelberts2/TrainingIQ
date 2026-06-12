@@ -198,6 +198,25 @@
                   Bron
                   <input name="source" value="manual" readonly />
                 </label>
+                <section class="interval-editor" aria-label="Intervalblokken">
+                  <div class="panel-header compact-header">
+                    <div>
+                      <p class="panel-label">Intervalblokken</p>
+                      <h3>Blokken binnen deze training</h3>
+                    </div>
+                    <button class="ghost-button compact-button" id="addIntervalButton" type="button">Blok toevoegen</button>
+                  </div>
+                  <div class="interval-grid-header" aria-hidden="true">
+                    <span>Naam</span>
+                    <span>Afstand</span>
+                    <span>Tijd</span>
+                    <span>Pace</span>
+                    <span>Gem HR</span>
+                    <span>Max HR</span>
+                    <span></span>
+                  </div>
+                  <div class="interval-rows" id="intervalRows"></div>
+                </section>
                 <label>
                   Notitie / doel
                   <textarea name="notes" rows="3" placeholder="Wat was het doel of hoe voelde dit?"></textarea>
@@ -248,6 +267,16 @@
               <div id="comparisonTable" class="comparison-table"></div>
             </article>
           </div>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Intervalanalyse</p>
+                <h2>Blok voor blok vergelijken</h2>
+              </div>
+            </div>
+            <div id="intervalComparison" class="interval-comparison"></div>
+          </article>
         </section>
 
         <section class="view" id="data" aria-label="Data">
@@ -302,7 +331,7 @@
                   CSV bestand
                   <input id="csvInput" type="file" accept=".csv,text/csv" />
                 </label>
-                <p class="help-text">Kolommen: date, startTime, sport, title, workoutType, durationMin, distanceKm, avgHr, maxHr, load, avgPace, elevationGain, notes.</p>
+                <p class="help-text">Kolommen: date, startTime, sport, title, workoutType, durationMin, distanceKm, avgHr, maxHr, load, avgPace, elevationGain, notes, intervals. Intervals mag JSON zijn.</p>
               </form>
               <div id="importStatus" class="import-status"></div>
             </article>
