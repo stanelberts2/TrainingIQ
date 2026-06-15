@@ -91,6 +91,14 @@ export const seedWorkouts = [
     avgPace: "",
     elevationGain: 0,
     intervals: [],
+    segments: [
+      { segmentIndex: 1, segmentType: "run", name: "Run 1", distanceMeters: 1000, durationSeconds: 270, avgHr: 158, avgPace: "4:30/km" },
+      { segmentIndex: 2, segmentType: "ski_erg", name: "SkiErg", distanceMeters: 1000, durationSeconds: 250, avgWatts: 218, avgHr: 166, rpe: 7 },
+      { segmentIndex: 3, segmentType: "run", name: "Run 2", distanceMeters: 1000, durationSeconds: 278, avgHr: 164, avgPace: "4:38/km" },
+      { segmentIndex: 4, segmentType: "sled_push", name: "Sled push", distanceMeters: 50, durationSeconds: 92, weightKg: 152, avgHr: 171, rpe: 8 },
+      { segmentIndex: 5, segmentType: "run", name: "Run 3", distanceMeters: 1000, durationSeconds: 286, avgHr: 168, avgPace: "4:46/km" },
+      { segmentIndex: 6, segmentType: "wall_ball", name: "Wall balls", reps: 100, weightKg: 6, durationSeconds: 245, avgHr: 174, rpe: 9 },
+    ],
     notes: "Stations technisch houden, runs gecontroleerd.",
   },
   {
@@ -187,6 +195,24 @@ export function normalizeManualWorkout(formData) {
     .filter((interval) => {
       return interval.name || interval.durationText || interval.distanceKm || interval.avgHr || interval.maxHr || interval.avgPace;
     });
+  const segments = formData.getAll("segmentType")
+    .map((segmentType, index) => ({
+      segmentIndex: index + 1,
+      segmentType,
+      name: formData.getAll("segmentName")[index],
+      durationText: formData.getAll("segmentDuration")[index],
+      distanceMeters: formData.getAll("segmentDistanceMeters")[index],
+      reps: formData.getAll("segmentReps")[index],
+      weightKg: formData.getAll("segmentWeightKg")[index],
+      avgWatts: formData.getAll("segmentAvgWatts")[index],
+      rpe: formData.getAll("segmentRpe")[index],
+      avgHr: formData.getAll("segmentAvgHr")[index],
+      maxHr: formData.getAll("segmentMaxHr")[index],
+      notes: formData.getAll("segmentNotes")[index],
+    }))
+    .filter((segment) => {
+      return segment.name || segment.durationText || segment.distanceMeters || segment.reps || segment.weightKg || segment.avgWatts || segment.rpe || segment.avgHr || segment.maxHr || segment.notes;
+    });
 
   return normalizeWorkout({
     source: "manual",
@@ -203,6 +229,7 @@ export function normalizeManualWorkout(formData) {
     avgPace: formData.get("avgPace"),
     elevationGain: formData.get("elevationGain"),
     intervals,
+    segments,
     notes: formData.get("notes"),
   });
 }

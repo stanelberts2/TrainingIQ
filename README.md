@@ -6,11 +6,11 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 
 - Dashboard met kerncijfers voor opgeslagen workouts.
 - Workout-logboek met sportfilter.
-- Handmatige workout-invoer met kalender/agenda en de V1-velden voor tijd, afstand, pace, hartslag, load en hoogtemeters.
+- Handmatige workout-invoer met kalender/agenda, intervalblokken en HYROX-onderdelen.
 - CSV-import als fallback voor Google Sheets.
 - Eerste analyse: vergelijk trainingen met dezelfde sport en hetzelfde type.
 - Intervalanalyse voor trainingen zoals 5 x 1 km: pace, tijd en hartslag per blok.
-- HYROX segmentmodel voor run, SkiErg, RowErg, sled push/pull, burpees, lunges, wall balls en krachtblokken.
+- HYROX segmentinvoer en analyse voor run, SkiErg, RowErg, sled push/pull, burpees, lunges, wall balls en krachtblokken.
 - Supabase-tabellen voor PR's en trainingsdoelen, zodat progressie later niet alleen uit losse workouts hoeft te worden afgeleid.
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.
 - Supabase-voorbereiding in `schema.sql`, `data/supabaseWorkoutMapper.js` en `data/supabaseWorkoutStore.js`.

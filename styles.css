@@ -306,6 +306,7 @@ label {
 .analysis-summary,
 .comparison-table,
 .interval-comparison,
+.segment-analysis,
 .import-status,
 .sync-actions {
   display: grid;
@@ -371,7 +372,8 @@ label {
   white-space: nowrap;
 }
 
-.interval-editor {
+.interval-editor,
+.segment-editor {
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -381,31 +383,50 @@ label {
 }
 
 .interval-grid-header,
-.interval-row {
+.interval-row,
+.segment-grid-header,
+.segment-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.8fr 0.8fr 0.9fr 0.75fr 0.75fr auto;
   gap: 8px;
   align-items: center;
 }
 
-.interval-grid-header {
+.interval-grid-header,
+.segment-grid-header {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 850;
   text-transform: uppercase;
 }
 
-.interval-rows {
+.interval-grid-header,
+.interval-row {
+  grid-template-columns: 1.1fr 0.8fr 0.8fr 0.9fr 0.75fr 0.75fr auto;
+}
+
+.segment-grid-header {
+  grid-template-columns: 1fr 1fr 0.75fr 0.8fr 0.65fr 0.65fr 0.7fr 0.6fr 0.7fr 0.7fr 1fr auto;
+}
+
+.segment-row {
+  grid-template-columns: 1fr 1fr 0.75fr 0.8fr 0.65fr 0.65fr 0.7fr 0.6fr 0.7fr 0.7fr 1fr auto;
+}
+
+.interval-rows,
+.segment-rows {
   display: grid;
   gap: 8px;
 }
 
-.interval-row input {
+.interval-row input,
+.segment-row input,
+.segment-row select {
   min-width: 0;
   background: var(--surface);
 }
 
-.remove-interval-button {
+.remove-interval-button,
+.remove-segment-button {
   min-width: 36px;
   min-height: 36px;
 }
@@ -572,19 +593,21 @@ textarea {
 .workout-item span,
 .table-row span,
 .interval-table-row span,
+.segment-table-row span,
 .summary-card span,
 .empty-state {
   color: var(--muted);
 }
 
-.interval-table {
+.interval-table,
+.segment-table {
   display: grid;
   gap: 8px;
 }
 
-.interval-table-row {
+.interval-table-row,
+.segment-table-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.75fr 0.75fr 0.75fr 0.75fr 1fr;
   gap: 10px;
   align-items: center;
   padding: 12px;
@@ -593,7 +616,21 @@ textarea {
   background: var(--surface-2);
 }
 
-.interval-table-head {
+.interval-table-row {
+  grid-template-columns: 1.1fr 0.75fr 0.75fr 0.75fr 0.75fr 1fr;
+}
+
+.segment-table-row {
+  grid-template-columns: 1.1fr 0.7fr 1fr 0.9fr 0.9fr 0.8fr;
+}
+
+.segment-table-row small {
+  display: block;
+  margin-top: 3px;
+}
+
+.interval-table-head,
+.segment-table-head {
   background: var(--surface);
   color: var(--ink);
   font-size: 0.82rem;
@@ -683,16 +720,20 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .interval-grid-header {
+  .interval-grid-header,
+  .segment-grid-header {
     display: none;
   }
 
   .interval-row,
-  .interval-table-row {
+  .interval-table-row,
+  .segment-row,
+  .segment-table-row {
     grid-template-columns: 1fr 1fr;
   }
 
-  .interval-table-head {
+  .interval-table-head,
+  .segment-table-head {
     display: none;
   }
 }

@@ -217,6 +217,30 @@
                   </div>
                   <div class="interval-rows" id="intervalRows"></div>
                 </section>
+                <section class="segment-editor" aria-label="HYROX onderdelen">
+                  <div class="panel-header compact-header">
+                    <div>
+                      <p class="panel-label">HYROX onderdelen</p>
+                      <h3>Stations en mixed-workout blokken</h3>
+                    </div>
+                    <button class="ghost-button compact-button" id="addSegmentButton" type="button">Onderdeel toevoegen</button>
+                  </div>
+                  <div class="segment-grid-header" aria-hidden="true">
+                    <span>Type</span>
+                    <span>Naam</span>
+                    <span>Tijd</span>
+                    <span>Afstand</span>
+                    <span>Reps</span>
+                    <span>Kg</span>
+                    <span>Watts</span>
+                    <span>RPE</span>
+                    <span>Gem HR</span>
+                    <span>Max HR</span>
+                    <span>Notitie</span>
+                    <span></span>
+                  </div>
+                  <div class="segment-rows" id="segmentRows"></div>
+                </section>
                 <label>
                   Notitie / doel
                   <textarea name="notes" rows="3" placeholder="Wat was het doel of hoe voelde dit?"></textarea>
@@ -276,6 +300,16 @@
               </div>
             </div>
             <div id="intervalComparison" class="interval-comparison"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">HYROX analyse</p>
+                <h2>Stations binnen deze workout</h2>
+              </div>
+            </div>
+            <div id="segmentAnalysis" class="segment-analysis"></div>
           </article>
         </section>
 

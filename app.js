@@ -36,6 +36,8 @@ const els = {
   workoutForm: document.querySelector("#workoutForm"),
   addIntervalButton: document.querySelector("#addIntervalButton"),
   intervalRows: document.querySelector("#intervalRows"),
+  addSegmentButton: document.querySelector("#addSegmentButton"),
+  segmentRows: document.querySelector("#segmentRows"),
   calendarToggle: document.querySelector("#calendarToggle"),
   calendarPopover: document.querySelector("#calendarPopover"),
   prevMonthButton: document.querySelector("#prevMonthButton"),
@@ -50,6 +52,7 @@ const els = {
   analysisSummary: document.querySelector("#analysisSummary"),
   comparisonTable: document.querySelector("#comparisonTable"),
   intervalComparison: document.querySelector("#intervalComparison"),
+  segmentAnalysis: document.querySelector("#segmentAnalysis"),
   csvInput: document.querySelector("#csvInput"),
   importStatus: document.querySelector("#importStatus"),
   supabaseConfigForm: document.querySelector("#supabaseConfigForm"),
@@ -62,6 +65,21 @@ const els = {
   supabaseDownloadButton: document.querySelector("#supabaseDownloadButton"),
   supabaseStatus: document.querySelector("#supabaseStatus"),
   supabaseStatusBadge: document.querySelector("#supabaseStatusBadge"),
+};
+
+const segmentTypeLabels = {
+  run: "Run",
+  ski_erg: "SkiErg",
+  row_erg: "RowErg",
+  sled_push: "Sled push",
+  sled_pull: "Sled pull",
+  burpee_broad_jump: "Burpee broad jumps",
+  sandbag_lunge: "Sandbag lunges",
+  wall_ball: "Wall balls",
+  strength: "Kracht",
+  rest: "Rust",
+  transition: "Transitie",
+  other: "Overig",
 };
 
 function sortedWorkouts(workouts = state.workouts) {
@@ -115,6 +133,13 @@ function paceForInterval(interval) {
   return `${Math.floor(secondsPerKm / 60)}:${String(secondsPerKm % 60).padStart(2, "0")}/km`;
 }
 
+function paceForSegment(segment) {
+  if (segment.avgPace) return segment.avgPace;
+  if (!segment.durationSeconds || !segment.distanceMeters) return "-";
+  const secondsPerKm = Math.round(segment.durationSeconds / (segment.distanceMeters / 1000));
+  return `${Math.floor(secondsPerKm / 60)}:${String(secondsPerKm % 60).padStart(2, "0")}/km`;
+}
+
 function toDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -163,6 +188,7 @@ function renderDashboard() {
       detailRow("Repduur", latest.repDurationSeconds ? formatSeconds(latest.repDurationSeconds) : "-"),
       detailRow("Kwaliteitsvolume", latest.qualityVolumeMeters ? `${latest.qualityVolumeMeters} m` : "-"),
       detailRow("Kwaliteitstijd", latest.qualityDurationSeconds ? formatSeconds(latest.qualityDurationSeconds) : "-"),
+      detailRow("HYROX onderdelen", latest.segments?.length || "-"),
       detailRow("Notitie", latest.notes || "-"),
     ].join("");
   }
@@ -285,6 +311,7 @@ function renderAnalysis() {
     els.analysisSummary.innerHTML = `<p class="empty-state">Voeg workouts toe om te vergelijken.</p>`;
     els.comparisonTable.innerHTML = "";
     els.intervalComparison.innerHTML = "";
+    els.segmentAnalysis.innerHTML = "";
     return;
   }
 
@@ -331,6 +358,7 @@ function renderAnalysis() {
     .join("");
 
   renderIntervalComparison(selected, previous);
+  renderSegmentAnalysis(selected, previous);
 }
 
 function average(values) {
@@ -384,6 +412,82 @@ function renderIntervalComparison(selected, previous) {
   `;
 }
 
+function renderSegmentAnalysis(selected, previous) {
+  const segments = selected.segments || [];
+
+  if (!segments.length) {
+    els.segmentAnalysis.innerHTML = `<p class="empty-state">Deze workout heeft nog geen HYROX-onderdelen. Voeg stations toe zoals Run, SkiErg, Sled push of Wall balls om stationtijden en zwakke punten te zien.</p>`;
+    return;
+  }
+
+  const runSegments = segments.filter((segment) => segment.segmentType === "run");
+  const stationSegments = segments.filter((segment) => segment.segmentType !== "run" && segment.segmentType !== "rest" && segment.segmentType !== "transition");
+  const totalRunSeconds = runSegments.reduce((sum, segment) => sum + numberOrZero(segment.durationSeconds), 0);
+  const totalStationSeconds = stationSegments.reduce((sum, segment) => sum + numberOrZero(segment.durationSeconds), 0);
+  const totalRunMeters = runSegments.reduce((sum, segment) => sum + numberOrZero(segment.distanceMeters), 0);
+  const avgStationRpe = average(stationSegments.map((segment) => numberOrZero(segment.rpe)));
+  const previousByType = previous.flatMap((workout) => workout.segments || []);
+
+  els.segmentAnalysis.innerHTML = `
+    <div class="analysis-summary">
+      <div class="summary-card">
+        <strong>${segments.length} onderdeel(en)</strong>
+        <span>${stationSegments.length} station(s), ${runSegments.length} runblok(ken).</span>
+      </div>
+      <div class="summary-card">
+        <strong>${formatSeconds(totalRunSeconds)}</strong>
+        <span>Runtijd · ${totalRunMeters ? `${(totalRunMeters / 1000).toFixed(2)} km` : "afstand onbekend"}</span>
+      </div>
+      <div class="summary-card">
+        <strong>${formatSeconds(totalStationSeconds)}</strong>
+        <span>Stationtijd exclusief runs, rust en transities.</span>
+      </div>
+      <div class="summary-card">
+        <strong>${avgStationRpe ? avgStationRpe.toFixed(1) : "-"}</strong>
+        <span>Gemiddelde station-RPE.</span>
+      </div>
+    </div>
+    <div class="segment-table">
+      <div class="segment-table-row segment-table-head">
+        <strong>Onderdeel</strong>
+        <strong>Tijd</strong>
+        <strong>Afstand/Reps</strong>
+        <strong>Power/Gewicht</strong>
+        <strong>HR/RPE</strong>
+        <strong>Vorige gem.</strong>
+      </div>
+      ${segments.map((segment) => {
+        const previousMatches = previousByType.filter((item) => item.segmentType === segment.segmentType);
+        const previousSeconds = average(previousMatches.map((item) => numberOrZero(item.durationSeconds)));
+        const distanceOrReps = [
+          segment.distanceMeters ? `${segment.distanceMeters} m` : "",
+          segment.reps ? `${segment.reps} reps` : "",
+          paceForSegment(segment) !== "-" ? paceForSegment(segment) : "",
+        ].filter(Boolean).join(" · ") || "-";
+        const powerOrWeight = [
+          segment.avgWatts ? `${segment.avgWatts} W` : "",
+          segment.weightKg ? `${segment.weightKg} kg` : "",
+        ].filter(Boolean).join(" · ") || "-";
+        const hrRpe = [
+          segment.avgHr ? `HR ${segment.avgHr}${segment.maxHr ? `/${segment.maxHr}` : ""}` : "",
+          segment.rpe ? `RPE ${segment.rpe}` : "",
+        ].filter(Boolean).join(" · ") || "-";
+
+        return `
+          <div class="segment-table-row">
+            <span><strong>${segmentTypeLabels[segment.segmentType] || segment.segmentType}</strong><small>${segment.name || "-"}</small></span>
+            <span>${formatSeconds(segment.durationSeconds)}</span>
+            <span>${distanceOrReps}</span>
+            <span>${powerOrWeight}</span>
+            <span>${hrRpe}</span>
+            <span>${previousMatches.length ? formatSeconds(previousSeconds) : "-"}</span>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function createIntervalRow(index = 1) {
   const row = document.createElement("div");
   row.className = "interval-row";
@@ -406,6 +510,37 @@ function addIntervalRow() {
 function resetIntervalRows() {
   els.intervalRows.innerHTML = "";
   addIntervalRow();
+}
+
+function createSegmentRow(index = 1) {
+  const row = document.createElement("div");
+  row.className = "segment-row";
+  row.innerHTML = `
+    <select name="segmentType" aria-label="Onderdeeltype">
+      ${Object.entries(segmentTypeLabels).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+    </select>
+    <input name="segmentName" placeholder="Onderdeel ${index}" aria-label="Onderdeelnaam" />
+    <input name="segmentDuration" placeholder="4:10" aria-label="Onderdeeltijd" />
+    <input name="segmentDistanceMeters" type="number" min="0" step="1" placeholder="1000" aria-label="Onderdeelafstand meter" />
+    <input name="segmentReps" type="number" min="0" step="1" placeholder="100" aria-label="Onderdeel reps" />
+    <input name="segmentWeightKg" type="number" min="0" step="0.5" placeholder="152" aria-label="Onderdeel gewicht kilogram" />
+    <input name="segmentAvgWatts" type="number" min="0" step="1" placeholder="215" aria-label="Onderdeel gemiddeld wattage" />
+    <input name="segmentRpe" type="number" min="0" max="10" step="0.5" placeholder="8" aria-label="Onderdeel RPE" />
+    <input name="segmentAvgHr" type="number" min="0" step="1" placeholder="165" aria-label="Onderdeel gemiddelde hartslag" />
+    <input name="segmentMaxHr" type="number" min="0" step="1" placeholder="178" aria-label="Onderdeel maximale hartslag" />
+    <input name="segmentNotes" placeholder="Notitie" aria-label="Onderdeelnotitie" />
+    <button class="icon-button remove-segment-button" type="button" aria-label="Verwijder onderdeel">x</button>
+  `;
+  return row;
+}
+
+function addSegmentRow() {
+  els.segmentRows.append(createSegmentRow(els.segmentRows.children.length + 1));
+}
+
+function resetSegmentRows() {
+  els.segmentRows.innerHTML = "";
+  addSegmentRow();
 }
 
 function getSupabaseConfig() {
@@ -611,6 +746,7 @@ function bindEvents() {
     event.currentTarget.reset();
     els.workoutForm.elements.date.value = selectedDate;
     resetIntervalRows();
+    resetSegmentRows();
   });
 
   els.addIntervalButton.addEventListener("click", () => {
@@ -623,6 +759,18 @@ function bindEvents() {
 
     removeButton.closest(".interval-row").remove();
     if (!els.intervalRows.children.length) resetIntervalRows();
+  });
+
+  els.addSegmentButton.addEventListener("click", () => {
+    addSegmentRow();
+  });
+
+  els.segmentRows.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".remove-segment-button");
+    if (!removeButton) return;
+
+    removeButton.closest(".segment-row").remove();
+    if (!els.segmentRows.children.length) resetSegmentRows();
   });
 
   els.calendarToggle.addEventListener("click", () => {
@@ -716,6 +864,7 @@ function init() {
   state.calendarMonth = dateFromKey(today);
   state.selectedWorkoutId = sortedWorkouts()[0]?.id || null;
   resetIntervalRows();
+  resetSegmentRows();
   bindEvents();
   renderSupabaseConfig();
   refreshSupabaseUser();
