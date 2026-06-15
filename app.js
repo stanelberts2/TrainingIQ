@@ -503,8 +503,10 @@ function createIntervalRow(index = 1) {
   return row;
 }
 
-function addIntervalRow() {
-  els.intervalRows.append(createIntervalRow(els.intervalRows.children.length + 1));
+function addIntervalRow(shouldFocus = false) {
+  const row = createIntervalRow(els.intervalRows.children.length + 1);
+  els.intervalRows.append(row);
+  if (shouldFocus) row.querySelector("input")?.focus();
 }
 
 function resetIntervalRows() {
@@ -534,8 +536,13 @@ function createSegmentRow(index = 1) {
   return row;
 }
 
-function addSegmentRow() {
-  els.segmentRows.append(createSegmentRow(els.segmentRows.children.length + 1));
+function addSegmentRow(shouldFocus = false) {
+  const row = createSegmentRow(els.segmentRows.children.length + 1);
+  els.segmentRows.append(row);
+  if (shouldFocus) {
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.querySelector("select")?.focus();
+  }
 }
 
 function resetSegmentRows() {
@@ -750,7 +757,7 @@ function bindEvents() {
   });
 
   els.addIntervalButton.addEventListener("click", () => {
-    addIntervalRow();
+    addIntervalRow(true);
   });
 
   els.intervalRows.addEventListener("click", (event) => {
@@ -762,7 +769,7 @@ function bindEvents() {
   });
 
   els.addSegmentButton.addEventListener("click", () => {
-    addSegmentRow();
+    addSegmentRow(true);
   });
 
   els.segmentRows.addEventListener("click", (event) => {
