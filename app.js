@@ -160,6 +160,7 @@ function renderDashboard() {
       detailRow("Load", latest.load || "-"),
       detailRow("Hoogtemeters", latest.elevationGain ? `${latest.elevationGain} m` : "-"),
       detailRow("Intervaltype", latest.intervalFamily || "-"),
+      detailRow("Repduur", latest.repDurationSeconds ? formatSeconds(latest.repDurationSeconds) : "-"),
       detailRow("Kwaliteitsvolume", latest.qualityVolumeMeters ? `${latest.qualityVolumeMeters} m` : "-"),
       detailRow("Notitie", latest.notes || "-"),
     ].join("");

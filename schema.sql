@@ -45,6 +45,7 @@ create table if not exists workouts (
   elevation_gain numeric not null default 0,
   interval_family text not null default '',
   rep_distance_meters numeric not null default 0,
+  rep_duration_seconds numeric not null default 0,
   rep_count integer not null default 0,
   quality_volume_meters numeric not null default 0,
   notes text not null default '',
@@ -57,6 +58,7 @@ create table if not exists workouts (
 alter table workouts
   add column if not exists interval_family text not null default '',
   add column if not exists rep_distance_meters numeric not null default 0,
+  add column if not exists rep_duration_seconds numeric not null default 0,
   add column if not exists rep_count integer not null default 0,
   add column if not exists quality_volume_meters numeric not null default 0;
 

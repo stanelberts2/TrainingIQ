@@ -143,6 +143,7 @@ export function normalizeWorkout(input = {}) {
     intervals,
     intervalFamily: String(input.intervalFamily || input.interval_family || intervalProfile.intervalFamily || ""),
     repDistanceMeters: numberOrZero(input.repDistanceMeters ?? input.rep_distance_meters) || intervalProfile.repDistanceMeters,
+    repDurationSeconds: numberOrZero(input.repDurationSeconds ?? input.rep_duration_seconds) || intervalProfile.repDurationSeconds,
     repCount: numberOrZero(input.repCount ?? input.rep_count) || intervalProfile.repCount,
     qualityVolumeMeters: numberOrZero(input.qualityVolumeMeters ?? input.quality_volume_meters) || intervalProfile.qualityVolumeMeters,
     notes: String(input.notes || input.description || ""),
@@ -209,6 +210,7 @@ export function normalizeCsvWorkout(record = {}) {
     intervals: parseIntervals(record.intervals || record.laps || record.workout_laps),
     intervalFamily: record.intervalFamily || record.interval_family,
     repDistanceMeters: record.repDistanceMeters || record.rep_distance_meters,
+    repDurationSeconds: record.repDurationSeconds || record.rep_duration_seconds,
     repCount: record.repCount || record.rep_count,
     qualityVolumeMeters: record.qualityVolumeMeters || record.quality_volume_meters,
     notes: record.notes,
@@ -301,6 +303,7 @@ function inferIntervalProfile(intervals) {
     return {
       intervalFamily: "",
       repDistanceMeters: 0,
+      repDurationSeconds: 0,
       repCount: 0,
       qualityVolumeMeters: 0,
     };
@@ -310,15 +313,26 @@ function inferIntervalProfile(intervals) {
     .map((interval) => numberOrZero(interval.distanceMeters))
     .filter((distance) => distance > 0);
   const repDistanceMeters = mostCommonRoundedDistance(distances);
+  const durations = qualityIntervals
+    .map((interval) => numberOrZero(interval.durationSeconds))
+    .filter((duration) => duration > 0);
+  const repDurationSeconds = mostCommonRoundedDuration(durations);
   const matchingReps = repDistanceMeters
     ? qualityIntervals.filter((interval) => Math.abs(numberOrZero(interval.distanceMeters) - repDistanceMeters) <= Math.max(25, repDistanceMeters * 0.03))
+    : repDurationSeconds
+      ? qualityIntervals.filter((interval) => Math.abs(numberOrZero(interval.durationSeconds) - repDurationSeconds) <= Math.max(5, repDurationSeconds * 0.05))
     : qualityIntervals;
   const repCount = matchingReps.length;
   const qualityVolumeMeters = matchingReps.reduce((sum, interval) => sum + numberOrZero(interval.distanceMeters), 0);
 
   return {
-    intervalFamily: repDistanceMeters ? `${formatDistanceLabel(repDistanceMeters)}-reps` : "intervals",
+    intervalFamily: repDistanceMeters
+      ? `${formatDistanceLabel(repDistanceMeters)}-reps`
+      : repDurationSeconds
+        ? `${formatDurationLabel(repDurationSeconds)}-reps`
+        : "intervals",
     repDistanceMeters,
+    repDurationSeconds,
     repCount,
     qualityVolumeMeters,
   };
@@ -336,10 +350,30 @@ function mostCommonRoundedDistance(distances) {
   return Number(Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]);
 }
 
+function mostCommonRoundedDuration(durations) {
+  if (!durations.length) return 0;
+
+  const counts = durations.reduce((acc, duration) => {
+    const rounded = Math.round(duration / 5) * 5;
+    acc[rounded] = (acc[rounded] || 0) + 1;
+    return acc;
+  }, {});
+
+  return Number(Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]);
+}
+
 function formatDistanceLabel(distanceMeters) {
   if (distanceMeters >= 1000 && distanceMeters % 1000 === 0) {
     return `${distanceMeters / 1000}km`;
   }
 
   return `${distanceMeters}m`;
+}
+
+function formatDurationLabel(durationSeconds) {
+  if (durationSeconds >= 60 && durationSeconds % 60 === 0) {
+    return `${durationSeconds / 60}min`;
+  }
+
+  return `${durationSeconds}s`;
 }
