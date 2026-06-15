@@ -373,7 +373,8 @@ label {
 }
 
 .interval-editor,
-.segment-editor {
+.segment-editor,
+.strength-editor {
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -383,16 +384,13 @@ label {
 }
 
 .interval-grid-header,
-.interval-row,
-.segment-grid-header,
-.segment-row {
+.interval-row {
   display: grid;
   gap: 8px;
   align-items: center;
 }
 
-.interval-grid-header,
-.segment-grid-header {
+.interval-grid-header {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 850;
@@ -404,31 +402,61 @@ label {
   grid-template-columns: 1.1fr 0.8fr 0.8fr 0.9fr 0.75fr 0.75fr auto;
 }
 
-.segment-grid-header {
-  grid-template-columns: 1fr 1fr 0.75fr 0.8fr 0.65fr 0.65fr 0.7fr 0.6fr 0.7fr 0.7fr 1fr auto;
-}
-
-.segment-row {
-  grid-template-columns: 1fr 1fr 0.75fr 0.8fr 0.65fr 0.65fr 0.7fr 0.6fr 0.7fr 0.7fr 1fr auto;
-}
-
 .interval-rows,
-.segment-rows {
+.segment-rows,
+.strength-rows {
   display: grid;
   gap: 8px;
 }
 
 .interval-row input,
 .segment-row input,
-.segment-row select {
+.segment-row select,
+.strength-row input {
   min-width: 0;
   background: var(--surface);
 }
 
 .remove-interval-button,
-.remove-segment-button {
+.remove-segment-button,
+.remove-strength-button {
   min-width: 36px;
   min-height: 36px;
+}
+
+.segment-row,
+.strength-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.row-card-header {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.75fr) minmax(160px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.strength-row .row-card-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.row-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.row-card-grid label {
+  font-size: 0.76rem;
+}
+
+.wide-field {
+  grid-column: span 2;
 }
 
 .date-field {
@@ -720,15 +748,19 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .interval-grid-header,
-  .segment-grid-header {
+  .interval-grid-header {
     display: none;
   }
 
   .interval-row,
   .interval-table-row,
-  .segment-row,
   .segment-table-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .row-card-header,
+  .strength-row .row-card-header,
+  .row-card-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -755,8 +787,15 @@ textarea {
   .nav-list,
   .form-row,
   .date-field,
-  .button-row {
+  .button-row,
+  .row-card-header,
+  .strength-row .row-card-header,
+  .row-card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wide-field {
+    grid-column: auto;
   }
 
   .detail-row,

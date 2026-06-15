@@ -15,6 +15,7 @@ export const hyroxSegmentTypes = [
   "sled_pull",
   "burpee_broad_jump",
   "sandbag_lunge",
+  "farmer_carry",
   "wall_ball",
   "strength",
   "rest",
@@ -213,6 +214,20 @@ export function normalizeManualWorkout(formData) {
     .filter((segment) => {
       return segment.name || segment.durationText || segment.distanceMeters || segment.reps || segment.weightKg || segment.avgWatts || segment.rpe || segment.avgHr || segment.maxHr || segment.notes;
     });
+  const strengthSegments = formData.getAll("strengthName")
+    .map((name, index) => ({
+      segmentIndex: segments.length + index + 1,
+      segmentType: "strength",
+      name,
+      sets: formData.getAll("strengthSets")[index],
+      reps: formData.getAll("strengthReps")[index],
+      weightKg: formData.getAll("strengthWeightKg")[index],
+      rpe: formData.getAll("strengthRpe")[index],
+      notes: formData.getAll("strengthNotes")[index],
+    }))
+    .filter((segment) => {
+      return segment.name || segment.sets || segment.reps || segment.weightKg || segment.rpe || segment.notes;
+    });
 
   return normalizeWorkout({
     source: "manual",
@@ -229,7 +244,7 @@ export function normalizeManualWorkout(formData) {
     avgPace: formData.get("avgPace"),
     elevationGain: formData.get("elevationGain"),
     intervals,
-    segments,
+    segments: [...segments, ...strengthSegments],
     notes: formData.get("notes"),
   });
 }
@@ -358,6 +373,7 @@ function normalizeSegments(segments = []) {
       startOffsetSeconds: normalizeDurationSeconds(segment.startOffsetSeconds ?? segment.start_offset_seconds),
       durationSeconds: normalizeDurationSeconds(segment.durationSeconds ?? segment.duration_seconds ?? segment.durationText),
       distanceMeters: numberOrZero(segment.distanceMeters ?? segment.distance_meters),
+      sets: numberOrZero(segment.sets),
       reps: numberOrZero(segment.reps),
       weightKg: numberOrZero(segment.weightKg ?? segment.weight_kg),
       avgHr: numberOrZero(segment.avgHr ?? segment.avg_hr),

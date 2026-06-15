@@ -38,6 +38,8 @@ const els = {
   intervalRows: document.querySelector("#intervalRows"),
   addSegmentButton: document.querySelector("#addSegmentButton"),
   segmentRows: document.querySelector("#segmentRows"),
+  addStrengthButton: document.querySelector("#addStrengthButton"),
+  strengthRows: document.querySelector("#strengthRows"),
   calendarToggle: document.querySelector("#calendarToggle"),
   calendarPopover: document.querySelector("#calendarPopover"),
   prevMonthButton: document.querySelector("#prevMonthButton"),
@@ -75,6 +77,7 @@ const segmentTypeLabels = {
   sled_pull: "Sled pull",
   burpee_broad_jump: "Burpee broad jumps",
   sandbag_lunge: "Sandbag lunges",
+  farmer_carry: "Farmer's carry",
   wall_ball: "Wall balls",
   strength: "Kracht",
   rest: "Rust",
@@ -461,6 +464,7 @@ function renderSegmentAnalysis(selected, previous) {
         const previousSeconds = average(previousMatches.map((item) => numberOrZero(item.durationSeconds)));
         const distanceOrReps = [
           segment.distanceMeters ? `${segment.distanceMeters} m` : "",
+          segment.sets ? `${segment.sets} sets` : "",
           segment.reps ? `${segment.reps} reps` : "",
           paceForSegment(segment) !== "-" ? paceForSegment(segment) : "",
         ].filter(Boolean).join(" · ") || "-";
@@ -518,20 +522,24 @@ function createSegmentRow(index = 1) {
   const row = document.createElement("div");
   row.className = "segment-row";
   row.innerHTML = `
-    <select name="segmentType" aria-label="Onderdeeltype">
-      ${Object.entries(segmentTypeLabels).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
-    </select>
-    <input name="segmentName" placeholder="Onderdeel ${index}" aria-label="Onderdeelnaam" />
-    <input name="segmentDuration" placeholder="4:10" aria-label="Onderdeeltijd" />
-    <input name="segmentDistanceMeters" type="number" min="0" step="1" placeholder="1000" aria-label="Onderdeelafstand meter" />
-    <input name="segmentReps" type="number" min="0" step="1" placeholder="100" aria-label="Onderdeel reps" />
-    <input name="segmentWeightKg" type="number" min="0" step="0.5" placeholder="152" aria-label="Onderdeel gewicht kilogram" />
-    <input name="segmentAvgWatts" type="number" min="0" step="1" placeholder="215" aria-label="Onderdeel gemiddeld wattage" />
-    <input name="segmentRpe" type="number" min="0" max="10" step="0.5" placeholder="8" aria-label="Onderdeel RPE" />
-    <input name="segmentAvgHr" type="number" min="0" step="1" placeholder="165" aria-label="Onderdeel gemiddelde hartslag" />
-    <input name="segmentMaxHr" type="number" min="0" step="1" placeholder="178" aria-label="Onderdeel maximale hartslag" />
-    <input name="segmentNotes" placeholder="Notitie" aria-label="Onderdeelnotitie" />
-    <button class="icon-button remove-segment-button" type="button" aria-label="Verwijder onderdeel">x</button>
+    <div class="row-card-header">
+      <select name="segmentType" aria-label="Onderdeeltype">
+        ${Object.entries(segmentTypeLabels).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+      </select>
+      <input name="segmentName" placeholder="Onderdeel ${index}" aria-label="Onderdeelnaam" />
+      <button class="icon-button remove-segment-button" type="button" aria-label="Verwijder onderdeel">x</button>
+    </div>
+    <div class="row-card-grid">
+      <label>Tijd<input name="segmentDuration" placeholder="4:10" aria-label="Onderdeeltijd" /></label>
+      <label>Afstand m<input name="segmentDistanceMeters" type="number" min="0" step="1" placeholder="1000" aria-label="Onderdeelafstand meter" /></label>
+      <label>Reps<input name="segmentReps" type="number" min="0" step="1" placeholder="100" aria-label="Onderdeel reps" /></label>
+      <label>Kg<input name="segmentWeightKg" type="number" min="0" step="0.5" placeholder="152" aria-label="Onderdeel gewicht kilogram" /></label>
+      <label>Watts<input name="segmentAvgWatts" type="number" min="0" step="1" placeholder="215" aria-label="Onderdeel gemiddeld wattage" /></label>
+      <label>RPE<input name="segmentRpe" type="number" min="0" max="10" step="0.5" placeholder="8" aria-label="Onderdeel RPE" /></label>
+      <label>Gem HR<input name="segmentAvgHr" type="number" min="0" step="1" placeholder="165" aria-label="Onderdeel gemiddelde hartslag" /></label>
+      <label>Max HR<input name="segmentMaxHr" type="number" min="0" step="1" placeholder="178" aria-label="Onderdeel maximale hartslag" /></label>
+      <label class="wide-field">Notitie<input name="segmentNotes" placeholder="Notitie" aria-label="Onderdeelnotitie" /></label>
+    </div>
   `;
   return row;
 }
@@ -548,6 +556,39 @@ function addSegmentRow(shouldFocus = false) {
 function resetSegmentRows() {
   els.segmentRows.innerHTML = "";
   addSegmentRow();
+}
+
+function createStrengthRow(index = 1) {
+  const row = document.createElement("div");
+  row.className = "strength-row";
+  row.innerHTML = `
+    <div class="row-card-header">
+      <input name="strengthName" placeholder="Oefening ${index}" aria-label="Krachtoefening" />
+      <button class="icon-button remove-strength-button" type="button" aria-label="Verwijder oefening">x</button>
+    </div>
+    <div class="row-card-grid">
+      <label>Sets<input name="strengthSets" type="number" min="0" step="1" placeholder="4" /></label>
+      <label>Reps<input name="strengthReps" type="number" min="0" step="1" placeholder="8" /></label>
+      <label>Kg<input name="strengthWeightKg" type="number" min="0" step="0.5" placeholder="100" /></label>
+      <label>RPE<input name="strengthRpe" type="number" min="0" max="10" step="0.5" placeholder="8" /></label>
+      <label class="wide-field">Notitie<input name="strengthNotes" placeholder="Tempo, rust, techniek..." /></label>
+    </div>
+  `;
+  return row;
+}
+
+function addStrengthRow(shouldFocus = false) {
+  const row = createStrengthRow(els.strengthRows.children.length + 1);
+  els.strengthRows.append(row);
+  if (shouldFocus) {
+    row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    row.querySelector("input")?.focus();
+  }
+}
+
+function resetStrengthRows() {
+  els.strengthRows.innerHTML = "";
+  addStrengthRow();
 }
 
 function getSupabaseConfig() {
@@ -754,6 +795,7 @@ function bindEvents() {
     els.workoutForm.elements.date.value = selectedDate;
     resetIntervalRows();
     resetSegmentRows();
+    resetStrengthRows();
   });
 
   els.addIntervalButton.addEventListener("click", () => {
@@ -778,6 +820,18 @@ function bindEvents() {
 
     removeButton.closest(".segment-row").remove();
     if (!els.segmentRows.children.length) resetSegmentRows();
+  });
+
+  els.addStrengthButton.addEventListener("click", () => {
+    addStrengthRow(true);
+  });
+
+  els.strengthRows.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".remove-strength-button");
+    if (!removeButton) return;
+
+    removeButton.closest(".strength-row").remove();
+    if (!els.strengthRows.children.length) resetStrengthRows();
   });
 
   els.calendarToggle.addEventListener("click", () => {
@@ -872,6 +926,7 @@ function init() {
   state.selectedWorkoutId = sortedWorkouts()[0]?.id || null;
   resetIntervalRows();
   resetSegmentRows();
+  resetStrengthRows();
   bindEvents();
   renderSupabaseConfig();
   refreshSupabaseUser();

@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#f6f7f8" />
     <title>TrainIQ</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=hyrox-segments-2" />
+    <link rel="stylesheet" href="./styles.css?v=hyrox-layout-strength-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -225,21 +225,17 @@
                     </div>
                     <button class="ghost-button compact-button" id="addSegmentButton" type="button">Onderdeel toevoegen</button>
                   </div>
-                  <div class="segment-grid-header" aria-hidden="true">
-                    <span>Type</span>
-                    <span>Naam</span>
-                    <span>Tijd</span>
-                    <span>Afstand</span>
-                    <span>Reps</span>
-                    <span>Kg</span>
-                    <span>Watts</span>
-                    <span>RPE</span>
-                    <span>Gem HR</span>
-                    <span>Max HR</span>
-                    <span>Notitie</span>
-                    <span></span>
-                  </div>
                   <div class="segment-rows" id="segmentRows"></div>
+                </section>
+                <section class="strength-editor" aria-label="Krachtonderdelen">
+                  <div class="panel-header compact-header">
+                    <div>
+                      <p class="panel-label">Kracht</p>
+                      <h3>Eigen oefeningen</h3>
+                    </div>
+                    <button class="ghost-button compact-button" id="addStrengthButton" type="button">Oefening toevoegen</button>
+                  </div>
+                  <div class="strength-rows" id="strengthRows"></div>
                 </section>
                 <label>
                   Notitie / doel
@@ -403,6 +399,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=hyrox-segments-2"></script>
+    <script type="module" src="./app.js?v=hyrox-layout-strength-1"></script>
   </body>
 </html>

@@ -10,7 +10,8 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - CSV-import als fallback voor Google Sheets.
 - Eerste analyse: vergelijk trainingen met dezelfde sport en hetzelfde type.
 - Intervalanalyse voor trainingen zoals 5 x 1 km: pace, tijd en hartslag per blok.
-- HYROX segmentinvoer en analyse voor run, SkiErg, RowErg, sled push/pull, burpees, lunges, wall balls en krachtblokken.
+- HYROX segmentinvoer en analyse voor run, SkiErg, RowErg, sled push/pull, burpees, lunges, farmer's carry, wall balls en krachtblokken.
+- Aparte krachtinvoer voor eigen oefeningen met sets, reps, gewicht, RPE en notities.
 - Supabase-tabellen voor PR's en trainingsdoelen, zodat progressie later niet alleen uit losse workouts hoeft te worden afgeleid.
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.
 - Supabase-voorbereiding in `schema.sql`, `data/supabaseWorkoutMapper.js` en `data/supabaseWorkoutStore.js`.
@@ -90,6 +91,7 @@ CSV-import gebruikt dezelfde namen. Oude CSV's met `label` blijven werken; die w
   name,
   durationSeconds,
   distanceMeters,
+  sets,
   reps,
   weightKg,
   avgHr,
