@@ -39,6 +39,39 @@ export async function signOut() {
   return { error };
 }
 
+export async function getStravaDataSource() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { dataSource: null, error: new Error("Supabase is not configured.") };
+
+  const { data, error } = await supabase
+    .from("data_sources")
+    .select("provider, external_account_id, provider_scope, sync_status, last_sync_at, last_error, provider_profile")
+    .eq("provider", "strava")
+    .maybeSingle();
+
+  return { dataSource: data || null, error };
+}
+
+export async function getStravaAuthUrl() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { url: "", error: new Error("Supabase is not configured.") };
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { url: "", error: sessionError };
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) return { url: "", error: new Error("Login eerst bij Supabase.") };
+
+  const { data, error } = await supabase.functions.invoke("strava-auth-url", {
+    body: { redirectTo: window.location.href.split("?")[0] },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (error) return { url: "", error };
+  return { url: data?.url || "", error: null };
+}
+
 export async function loadSupabaseWorkouts() {
   const supabase = getSupabaseClient();
   if (!supabase) return { workouts: [], error: new Error("Supabase is not configured.") };

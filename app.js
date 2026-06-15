@@ -67,6 +67,10 @@ const els = {
   supabaseDownloadButton: document.querySelector("#supabaseDownloadButton"),
   supabaseStatus: document.querySelector("#supabaseStatus"),
   supabaseStatusBadge: document.querySelector("#supabaseStatusBadge"),
+  stravaConnectButton: document.querySelector("#stravaConnectButton"),
+  stravaRefreshButton: document.querySelector("#stravaRefreshButton"),
+  stravaStatus: document.querySelector("#stravaStatus"),
+  stravaStatusBadge: document.querySelector("#stravaStatusBadge"),
 };
 
 const segmentTypeLabels = {
@@ -631,6 +635,13 @@ function updateSupabaseStatus(message, tone = "idle") {
   els.supabaseStatusBadge.classList.toggle("is-error", tone === "error");
 }
 
+function updateStravaStatus(message, detail = "Koppel eerst Supabase en daarna Strava.", tone = "idle") {
+  els.stravaStatus.innerHTML = `<div class="summary-card"><strong>${message}</strong><span>${detail}</span></div>`;
+  els.stravaStatusBadge.textContent = tone === "ready" ? "Gekoppeld" : tone === "error" ? "Actie nodig" : "Niet gekoppeld";
+  els.stravaStatusBadge.classList.toggle("is-ready", tone === "ready");
+  els.stravaStatusBadge.classList.toggle("is-error", tone === "error");
+}
+
 async function loadSupabaseModule() {
   if (!hasSupabaseConfig()) {
     throw new Error("Supabase config ontbreekt. Vul eerst URL en anon key in.");
@@ -654,9 +665,50 @@ async function refreshSupabaseUser() {
       user ? "Ingelogd bij Supabase." : "Config opgeslagen. Login om te syncen.",
       user ? "ready" : "idle",
     );
+    if (user) refreshStravaStatus();
   } catch (error) {
     state.supabaseUser = null;
     updateSupabaseStatus(error.message, "error");
+  }
+}
+
+async function refreshStravaStatus() {
+  try {
+    if (!state.supabaseUser) {
+      updateStravaStatus("Nog geen Supabase-sessie.", "Login eerst met je magic link.", "idle");
+      return;
+    }
+
+    const { getStravaDataSource } = await loadSupabaseModule();
+    const { dataSource, error } = await getStravaDataSource();
+    if (error) throw error;
+
+    if (!dataSource) {
+      updateStravaStatus("Strava is nog niet gekoppeld.", "Klik op Strava koppelen zodra de Edge Functions gedeployed zijn.", "idle");
+      return;
+    }
+
+    const athlete = dataSource.provider_profile?.firstname
+      ? `${dataSource.provider_profile.firstname} ${dataSource.provider_profile.lastname || ""}`.trim()
+      : `Athlete ${dataSource.external_account_id}`;
+    const lastSync = dataSource.last_sync_at ? `Laatste sync: ${formatDate(dataSource.last_sync_at.slice(0, 10))}.` : "Nog geen activity import.";
+    const detail = dataSource.last_error || `${athlete} · ${lastSync} Scope: ${dataSource.provider_scope || "-"}`;
+    updateStravaStatus("Strava gekoppeld.", detail, dataSource.last_error ? "error" : "ready");
+  } catch (error) {
+    updateStravaStatus(error.message, "Controleer of de Strava migration en Edge Functions klaar staan.", "error");
+  }
+}
+
+async function handleStravaConnect() {
+  try {
+    updateStravaStatus("Strava autorisatie wordt voorbereid...", "Je wordt zo naar Strava gestuurd.", "idle");
+    const { getStravaAuthUrl } = await loadSupabaseModule();
+    const { url, error } = await getStravaAuthUrl();
+    if (error) throw error;
+    if (!url) throw new Error("Geen Strava autorisatie-url ontvangen.");
+    window.location.href = url;
+  } catch (error) {
+    updateStravaStatus(error.message, "Controleer Supabase login, secrets en Edge Functions.", "error");
   }
 }
 
@@ -916,6 +968,14 @@ function bindEvents() {
   els.supabaseDownloadButton.addEventListener("click", () => {
     handleSupabaseDownload();
   });
+
+  els.stravaConnectButton.addEventListener("click", () => {
+    handleStravaConnect();
+  });
+
+  els.stravaRefreshButton.addEventListener("click", () => {
+    refreshStravaStatus();
+  });
 }
 
 function init() {
@@ -930,6 +990,7 @@ function init() {
   bindEvents();
   renderSupabaseConfig();
   refreshSupabaseUser();
+  updateStravaStatus("Strava nog niet gekoppeld.");
   render();
 }
 

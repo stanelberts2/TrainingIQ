@@ -352,6 +352,24 @@
             <article class="panel">
               <div class="panel-header">
                 <div>
+                  <p class="panel-label">Strava sync</p>
+                  <h2>Activiteiten automatisch importeren</h2>
+                </div>
+                <span class="status-pill" id="stravaStatusBadge">Niet gekoppeld</span>
+              </div>
+              <div class="sync-actions">
+                <p class="help-text">Koppel Strava via Supabase. Nieuwe Strava-activiteiten kunnen daarna via de webhook naar TrainingIQ worden geschreven.</p>
+                <div class="button-row">
+                  <button class="primary-button" id="stravaConnectButton" type="button">Strava koppelen</button>
+                  <button class="ghost-button" id="stravaRefreshButton" type="button">Status ophalen</button>
+                </div>
+              </div>
+              <div id="stravaStatus" class="import-status"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
                   <p class="panel-label">CSV fallback</p>
                   <h2>Data binnenhalen zonder koppeling</h2>
                 </div>
@@ -385,8 +403,8 @@
                   Supabase Auth + handmatige cloud-sync.
                 </li>
                 <li>
-                  <strong>Daarna:</strong>
-                  Strava OAuth, activities importeren en periodiek syncen.
+                  <strong>Nu bouwen:</strong>
+                  Strava OAuth, webhook-events en automatische activity/lap import.
                 </li>
                 <li>
                   <strong>Later:</strong>
