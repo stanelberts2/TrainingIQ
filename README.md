@@ -10,6 +10,8 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - CSV-import als fallback voor Google Sheets.
 - Eerste analyse: vergelijk trainingen met dezelfde sport en hetzelfde type.
 - Intervalanalyse voor trainingen zoals 5 x 1 km: pace, tijd en hartslag per blok.
+- HYROX segmentmodel voor run, SkiErg, RowErg, sled push/pull, burpees, lunges, wall balls en krachtblokken.
+- Supabase-tabellen voor PR's en trainingsdoelen, zodat progressie later niet alleen uit losse workouts hoeft te worden afgeleid.
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.
 - Supabase-voorbereiding in `schema.sql`, `data/supabaseWorkoutMapper.js` en `data/supabaseWorkoutStore.js`.
 - Handmatige Supabase-sync via de Data-tab: magic-link login, lokale workouts plus intervalblokken uploaden en cloud-workouts ophalen.
@@ -50,6 +52,7 @@ De app gebruikt intern camelCase:
   avgPace,
   elevationGain,
   intervals,
+  segments,
   intervalFamily,
   repDistanceMeters,
   repDurationSeconds,
@@ -78,6 +81,27 @@ CSV-import gebruikt dezelfde namen. Oude CSV's met `label` blijven werken; die w
 }
 ```
 
+`segments` is bedoeld voor HYROX-onderdelen en mixed workouts:
+
+```js
+{
+  segmentIndex,
+  segmentType,
+  name,
+  durationSeconds,
+  distanceMeters,
+  reps,
+  weightKg,
+  avgHr,
+  maxHr,
+  avgPace,
+  avgWatts,
+  rpe,
+  load,
+  notes
+}
+```
+
 Voor progressieve overload leidt de app automatisch een intervalprofiel af. Een training met 6 blokken van 1 km krijgt bijvoorbeeld:
 
 ```js
@@ -103,7 +127,9 @@ Tijdsblokken worden ook ondersteund. Een training met 3 blokken van 10 minuten k
 6. Stuur een magic link naar je e-mailadres en open die link.
 7. Gebruik daarna `Lokale workouts uploaden` of `Cloud workouts ophalen`.
 
-De app blijft localStorage gebruiken als lokale cache. Supabase-sync is voorlopig handmatig, zodat de basis controleerbaar blijft. Workouts worden opgeslagen in `workouts`; intervalblokken worden opgeslagen in `workout_laps`.
+De app blijft localStorage gebruiken als lokale cache. Supabase-sync is voorlopig handmatig, zodat de basis controleerbaar blijft. Workouts worden opgeslagen in `workouts`; intervalblokken worden opgeslagen in `workout_laps`; HYROX-stations en mixed-workout onderdelen worden opgeslagen in `workout_segments`; PR's en doelen staan klaar in `personal_records` en `training_goals`.
+
+Nieuwe Supabase-wijzigingen staan ook als losse migraties in `supabase/migrations/`.
 
 Voor de volgende werksessie staat een concreet stappenplan in `NEXT_STEPS.md`.
 

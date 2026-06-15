@@ -2,6 +2,7 @@ import { getSupabaseClient } from "../lib/supabase.js";
 import { normalizeWorkouts } from "./workoutModel.js";
 import {
   intervalToSupabaseLapRow,
+  segmentToSupabaseRow,
   workoutToSupabaseRow,
   workoutsFromSupabaseRows,
 } from "./supabaseWorkoutMapper.js";
@@ -44,7 +45,7 @@ export async function loadSupabaseWorkouts() {
 
   const { data, error } = await supabase
     .from("workouts")
-    .select("*, workout_laps(*)")
+    .select("*, workout_laps(*), workout_segments(*)")
     .order("date", { ascending: false });
 
   if (error) return { workouts: [], error };
@@ -82,6 +83,9 @@ export async function saveSupabaseWorkout(workout) {
   const lapError = await replaceWorkoutLaps(supabase, normalizedWorkouts);
   if (lapError) return { workout: null, error: lapError };
 
+  const segmentError = await replaceWorkoutSegments(supabase, normalizedWorkouts);
+  if (segmentError) return { workout: null, error: segmentError };
+
   const { workouts: savedWorkouts, error: reloadError } = await loadSupabaseWorkoutsByIds([row.id]);
   if (reloadError) return { workout: null, error: reloadError };
 
@@ -117,6 +121,9 @@ export async function saveSupabaseWorkouts(workouts) {
   const lapError = await replaceWorkoutLaps(supabase, normalizedWorkouts);
   if (lapError) return { workouts: [], error: lapError };
 
+  const segmentError = await replaceWorkoutSegments(supabase, normalizedWorkouts);
+  if (segmentError) return { workouts: [], error: segmentError };
+
   const { workouts: savedWorkouts, error: reloadError } = await loadSupabaseWorkoutsByIds(rows.map((row) => row.id));
   if (reloadError) return { workouts: [], error: reloadError };
 
@@ -129,7 +136,7 @@ async function loadSupabaseWorkoutsByIds(ids) {
 
   const { data, error } = await supabase
     .from("workouts")
-    .select("*, workout_laps(*)")
+    .select("*, workout_laps(*), workout_segments(*)")
     .in("id", ids)
     .order("date", { ascending: false });
 
@@ -158,6 +165,30 @@ async function replaceWorkoutLaps(supabase, workouts) {
   const { error: insertError } = await supabase
     .from("workout_laps")
     .insert(lapRows);
+
+  return insertError || null;
+}
+
+async function replaceWorkoutSegments(supabase, workouts) {
+  const workoutIds = workouts.map((workout) => workout.id);
+  if (!workoutIds.length) return null;
+
+  const { error: deleteError } = await supabase
+    .from("workout_segments")
+    .delete()
+    .in("workout_id", workoutIds);
+
+  if (deleteError) return deleteError;
+
+  const segmentRows = workouts.flatMap((workout) => {
+    return (workout.segments || []).map((segment) => segmentToSupabaseRow(segment, workout.id));
+  });
+
+  if (!segmentRows.length) return null;
+
+  const { error: insertError } = await supabase
+    .from("workout_segments")
+    .insert(segmentRows);
 
   return insertError || null;
 }

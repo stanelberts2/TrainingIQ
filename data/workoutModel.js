@@ -7,6 +7,21 @@ export const sportLabels = {
 
 export const allowedSports = Object.keys(sportLabels);
 
+export const hyroxSegmentTypes = [
+  "run",
+  "ski_erg",
+  "row_erg",
+  "sled_push",
+  "sled_pull",
+  "burpee_broad_jump",
+  "sandbag_lunge",
+  "wall_ball",
+  "strength",
+  "rest",
+  "transition",
+  "other",
+];
+
 export const seedWorkouts = [
   {
     id: "run-threshold-2026-04-23",
@@ -141,6 +156,7 @@ export function normalizeWorkout(input = {}) {
     avgPace: String(input.avgPace || input.avg_pace || ""),
     elevationGain: numberOrZero(input.elevationGain ?? input.elevation_gain),
     intervals,
+    segments: normalizeSegments(input.segments || input.workout_segments || []),
     intervalFamily: String(input.intervalFamily || input.interval_family || intervalProfile.intervalFamily || ""),
     repDistanceMeters: numberOrZero(input.repDistanceMeters ?? input.rep_distance_meters) || intervalProfile.repDistanceMeters,
     repDurationSeconds: numberOrZero(input.repDurationSeconds ?? input.rep_duration_seconds) || intervalProfile.repDurationSeconds,
@@ -209,6 +225,7 @@ export function normalizeCsvWorkout(record = {}) {
     avgPace: record.avgPace || record.avg_pace,
     elevationGain: record.elevationGain || record.elevation_gain,
     intervals: parseIntervals(record.intervals || record.laps || record.workout_laps),
+    segments: parseStructuredArray(record.segments || record.workout_segments),
     intervalFamily: record.intervalFamily || record.interval_family,
     repDistanceMeters: record.repDistanceMeters || record.rep_distance_meters,
     repDurationSeconds: record.repDurationSeconds || record.rep_duration_seconds,
@@ -288,6 +305,10 @@ function normalizeDurationSeconds(value) {
 }
 
 function parseIntervals(value) {
+  return parseStructuredArray(value);
+}
+
+function parseStructuredArray(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
 
@@ -297,6 +318,42 @@ function parseIntervals(value) {
   } catch {
     return [];
   }
+}
+
+function normalizeSegments(segments = []) {
+  if (!Array.isArray(segments)) return [];
+
+  return segments
+    .map((segment, index) => ({
+      segmentIndex: numberOrZero(segment.segmentIndex ?? segment.segment_index) || index + 1,
+      segmentType: normalizeSegmentType(segment.segmentType || segment.segment_type),
+      name: String(segment.name || segment.label || `Segment ${index + 1}`).trim(),
+      startOffsetSeconds: normalizeDurationSeconds(segment.startOffsetSeconds ?? segment.start_offset_seconds),
+      durationSeconds: normalizeDurationSeconds(segment.durationSeconds ?? segment.duration_seconds ?? segment.durationText),
+      distanceMeters: numberOrZero(segment.distanceMeters ?? segment.distance_meters),
+      reps: numberOrZero(segment.reps),
+      weightKg: numberOrZero(segment.weightKg ?? segment.weight_kg),
+      avgHr: numberOrZero(segment.avgHr ?? segment.avg_hr),
+      maxHr: numberOrZero(segment.maxHr ?? segment.max_hr),
+      avgPace: String(segment.avgPace || segment.avg_pace || ""),
+      avgWatts: numberOrZero(segment.avgWatts ?? segment.avg_watts),
+      rpe: clamp(numberOrZero(segment.rpe), 0, 10),
+      load: numberOrZero(segment.load),
+      notes: String(segment.notes || ""),
+      rawPayload: segment.rawPayload || segment.raw_payload || {},
+    }))
+    .filter((segment) => {
+      return segment.name || segment.durationSeconds || segment.distanceMeters || segment.reps || segment.weightKg || segment.avgWatts || segment.notes;
+    });
+}
+
+function normalizeSegmentType(type) {
+  const normalized = String(type || "other").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return hyroxSegmentTypes.includes(normalized) ? normalized : "other";
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function inferIntervalProfile(intervals) {

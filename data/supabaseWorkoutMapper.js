@@ -49,6 +49,28 @@ export function intervalToSupabaseLapRow(interval, workoutId) {
   };
 }
 
+export function segmentToSupabaseRow(segment, workoutId) {
+  return {
+    workout_id: workoutId,
+    segment_index: segment.segmentIndex,
+    segment_type: segment.segmentType,
+    name: segment.name,
+    start_offset_seconds: segment.startOffsetSeconds,
+    duration_seconds: segment.durationSeconds,
+    distance_meters: segment.distanceMeters,
+    reps: segment.reps,
+    weight_kg: segment.weightKg,
+    avg_hr: segment.avgHr,
+    max_hr: segment.maxHr,
+    avg_pace: segment.avgPace,
+    avg_watts: segment.avgWatts,
+    rpe: segment.rpe,
+    load: segment.load,
+    notes: segment.notes,
+    raw_payload: segment.rawPayload || {},
+  };
+}
+
 export function workoutFromSupabaseRow(row) {
   const lapIntervals = intervalsFromSupabaseLapRows(row.workout_laps);
 
@@ -69,6 +91,7 @@ export function workoutFromSupabaseRow(row) {
     avgPace: row.avg_pace,
     elevationGain: row.elevation_gain,
     intervals: lapIntervals.length ? lapIntervals : row.raw_payload?.intervals || [],
+    segments: segmentsFromSupabaseRows(row.workout_segments),
     intervalFamily: row.interval_family,
     repDistanceMeters: row.rep_distance_meters,
     repDurationSeconds: row.rep_duration_seconds,
@@ -99,6 +122,31 @@ export function intervalsFromSupabaseLapRows(rows = []) {
       avgHr: row.avg_hr,
       maxHr: row.max_hr,
       avgPace: row.avg_pace,
+      rawPayload: row.raw_payload || {},
+    }));
+}
+
+export function segmentsFromSupabaseRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .sort((a, b) => a.segment_index - b.segment_index)
+    .map((row) => ({
+      segmentIndex: row.segment_index,
+      segmentType: row.segment_type,
+      name: row.name,
+      startOffsetSeconds: row.start_offset_seconds,
+      durationSeconds: row.duration_seconds,
+      distanceMeters: row.distance_meters,
+      reps: row.reps,
+      weightKg: row.weight_kg,
+      avgHr: row.avg_hr,
+      maxHr: row.max_hr,
+      avgPace: row.avg_pace,
+      avgWatts: row.avg_watts,
+      rpe: row.rpe,
+      load: row.load,
+      notes: row.notes,
       rawPayload: row.raw_payload || {},
     }));
 }

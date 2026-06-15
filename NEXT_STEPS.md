@@ -10,6 +10,8 @@ Dit is het startpunt voor de volgende sessie.
 - De handmatige invoer bevat nu de V1-velden: datum, starttijd, sport, titel, type, duur, afstand, gemiddelde HR, max HR, load, pace, hoogtemeters en notities.
 - Intervalblokken zijn toegevoegd voor trainingen zoals 5 x 1 km, inclusief afstand, tijd, pace, gemiddelde HR en max HR per blok.
 - Intervalprofielen worden automatisch afgeleid voor overload-analyse: bijvoorbeeld `1km-reps` of `10min-reps`, rep-afstand/repduur, aantal reps, kwaliteitsvolume en kwaliteitstijd.
+- HYROX-stations zijn voorbereid als `workout_segments`, zodat run, SkiErg, RowErg, sled push/pull, burpees, lunges, wall balls en krachtblokken analyseerbaar blijven binnen dezelfde workout.
+- PR's en doelen zijn voorbereid als `personal_records` en `training_goals`.
 - Supabase is voorbereid met:
   - `schema.sql`
   - `lib/supabase.js`
@@ -54,6 +56,8 @@ Na deze stap staat de basis-sync:
 - workouts blijven lokaal bruikbaar;
 - workouts kunnen naar Supabase;
 - intervalblokken worden opgeslagen in `workout_laps`;
+- HYROX-stations worden opgeslagen in `workout_segments`;
+- PR's en doelen kunnen later opgeslagen worden in `personal_records` en `training_goals`;
 - dezelfde data kan later op telefoon geladen worden;
 - Strava-import kan daarna bovenop deze basis gebouwd worden.
 
