@@ -25,6 +25,7 @@ export function workoutToSupabaseRow(workout, userId) {
     rep_duration_seconds: normalized.repDurationSeconds,
     rep_count: normalized.repCount,
     quality_volume_meters: normalized.qualityVolumeMeters,
+    quality_duration_seconds: normalized.qualityDurationSeconds,
     notes: normalized.notes,
     raw_payload: {
       intervals: normalized.intervals,
@@ -73,6 +74,7 @@ export function workoutFromSupabaseRow(row) {
     repDurationSeconds: row.rep_duration_seconds,
     repCount: row.rep_count,
     qualityVolumeMeters: row.quality_volume_meters,
+    qualityDurationSeconds: row.quality_duration_seconds,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

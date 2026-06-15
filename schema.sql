@@ -48,6 +48,7 @@ create table if not exists workouts (
   rep_duration_seconds numeric not null default 0,
   rep_count integer not null default 0,
   quality_volume_meters numeric not null default 0,
+  quality_duration_seconds numeric not null default 0,
   notes text not null default '',
   raw_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -60,7 +61,8 @@ alter table workouts
   add column if not exists rep_distance_meters numeric not null default 0,
   add column if not exists rep_duration_seconds numeric not null default 0,
   add column if not exists rep_count integer not null default 0,
-  add column if not exists quality_volume_meters numeric not null default 0;
+  add column if not exists quality_volume_meters numeric not null default 0,
+  add column if not exists quality_duration_seconds numeric not null default 0;
 
 create table if not exists workout_laps (
   id uuid primary key default gen_random_uuid(),

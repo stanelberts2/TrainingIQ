@@ -162,6 +162,7 @@ function renderDashboard() {
       detailRow("Intervaltype", latest.intervalFamily || "-"),
       detailRow("Repduur", latest.repDurationSeconds ? formatSeconds(latest.repDurationSeconds) : "-"),
       detailRow("Kwaliteitsvolume", latest.qualityVolumeMeters ? `${latest.qualityVolumeMeters} m` : "-"),
+      detailRow("Kwaliteitstijd", latest.qualityDurationSeconds ? formatSeconds(latest.qualityDurationSeconds) : "-"),
       detailRow("Notitie", latest.notes || "-"),
     ].join("");
   }

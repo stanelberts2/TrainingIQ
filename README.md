@@ -55,6 +55,7 @@ De app gebruikt intern camelCase:
   repDurationSeconds,
   repCount,
   qualityVolumeMeters,
+  qualityDurationSeconds,
   notes,
   createdAt,
   updatedAt
@@ -85,11 +86,12 @@ Voor progressieve overload leidt de app automatisch een intervalprofiel af. Een 
   repDistanceMeters: 1000,
   repDurationSeconds: 0,
   repCount: 6,
-  qualityVolumeMeters: 6000
+  qualityVolumeMeters: 6000,
+  qualityDurationSeconds: 1425
 }
 ```
 
-Tijdsblokken worden ook ondersteund. Een training met 3 blokken van 10 minuten krijgt bijvoorbeeld `intervalFamily: "10min-reps"` en `repDurationSeconds: 600`.
+Tijdsblokken worden ook ondersteund. Een training met 3 blokken van 10 minuten krijgt bijvoorbeeld `intervalFamily: "10min-reps"`, `repDurationSeconds: 600` en `qualityDurationSeconds: 1800`. Als er afstand per blok beschikbaar is, wordt `qualityVolumeMeters` ook gevuld.
 
 ## Supabase
 
