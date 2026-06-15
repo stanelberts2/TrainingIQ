@@ -43,12 +43,22 @@ create table if not exists workouts (
   load numeric not null default 0,
   avg_pace text not null default '',
   elevation_gain numeric not null default 0,
+  interval_family text not null default '',
+  rep_distance_meters numeric not null default 0,
+  rep_count integer not null default 0,
+  quality_volume_meters numeric not null default 0,
   notes text not null default '',
   raw_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, source, external_id)
 );
+
+alter table workouts
+  add column if not exists interval_family text not null default '',
+  add column if not exists rep_distance_meters numeric not null default 0,
+  add column if not exists rep_count integer not null default 0,
+  add column if not exists quality_volume_meters numeric not null default 0;
 
 create table if not exists workout_laps (
   id uuid primary key default gen_random_uuid(),
@@ -88,6 +98,7 @@ alter table detected_intervals
 
 create index if not exists workouts_user_date_idx on workouts (user_id, date desc);
 create index if not exists workouts_user_type_idx on workouts (user_id, sport, workout_type, date desc);
+create index if not exists workouts_interval_family_idx on workouts (user_id, sport, workout_type, interval_family, date desc);
 create index if not exists workouts_source_external_idx on workouts (source, external_id);
 create index if not exists workout_laps_workout_idx on workout_laps (workout_id, lap_index);
 create index if not exists detected_intervals_workout_idx on detected_intervals (workout_id, interval_index);

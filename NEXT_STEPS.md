@@ -9,6 +9,7 @@ Dit is het startpunt voor de volgende sessie.
 - Workouts worden nu lokaal bewaard in `localStorage`.
 - De handmatige invoer bevat nu de V1-velden: datum, starttijd, sport, titel, type, duur, afstand, gemiddelde HR, max HR, load, pace, hoogtemeters en notities.
 - Intervalblokken zijn toegevoegd voor trainingen zoals 5 x 1 km, inclusief afstand, tijd, pace, gemiddelde HR en max HR per blok.
+- Intervalprofielen worden automatisch afgeleid voor overload-analyse: bijvoorbeeld `1km-reps`, rep-afstand, aantal reps en kwaliteitsvolume.
 - Supabase is voorbereid met:
   - `schema.sql`
   - `lib/supabase.js`

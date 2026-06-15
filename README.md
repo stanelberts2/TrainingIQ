@@ -50,6 +50,10 @@ De app gebruikt intern camelCase:
   avgPace,
   elevationGain,
   intervals,
+  intervalFamily,
+  repDistanceMeters,
+  repCount,
+  qualityVolumeMeters,
   notes,
   createdAt,
   updatedAt
@@ -69,6 +73,17 @@ CSV-import gebruikt dezelfde namen. Oude CSV's met `label` blijven werken; die w
   avgHr,
   maxHr,
   avgPace
+}
+```
+
+Voor progressieve overload leidt de app automatisch een intervalprofiel af. Een training met 6 blokken van 1 km krijgt bijvoorbeeld:
+
+```js
+{
+  intervalFamily: "1km-reps",
+  repDistanceMeters: 1000,
+  repCount: 6,
+  qualityVolumeMeters: 6000
 }
 ```
 

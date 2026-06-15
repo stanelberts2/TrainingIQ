@@ -159,6 +159,8 @@ function renderDashboard() {
       detailRow("Max HR", latest.maxHr || "-"),
       detailRow("Load", latest.load || "-"),
       detailRow("Hoogtemeters", latest.elevationGain ? `${latest.elevationGain} m` : "-"),
+      detailRow("Intervaltype", latest.intervalFamily || "-"),
+      detailRow("Kwaliteitsvolume", latest.qualityVolumeMeters ? `${latest.qualityVolumeMeters} m` : "-"),
       detailRow("Notitie", latest.notes || "-"),
     ].join("");
   }
@@ -209,7 +211,7 @@ function renderWorkoutList() {
       <button class="workout-item ${workout.id === state.selectedWorkoutId ? "is-selected" : ""}" type="button" data-workout-id="${workout.id}">
         <strong>${workout.title}</strong>
         <span>${formatDate(workout.date)} · ${sportLabels[workout.sport]} · ${workout.workoutType}</span>
-        <span>${formatDuration(numberOrZero(workout.durationMin))} · ${paceForWorkout(workout)} · HR ${workout.avgHr || "-"} / ${workout.maxHr || "-"} · load ${workout.load || "-"}</span>
+        <span>${formatDuration(numberOrZero(workout.durationMin))} · ${paceForWorkout(workout)} · HR ${workout.avgHr || "-"} / ${workout.maxHr || "-"} · load ${workout.load || "-"}${workout.intervalFamily ? ` · ${workout.repCount}x ${workout.intervalFamily}` : ""}</span>
       </button>
     `)
     .join("");

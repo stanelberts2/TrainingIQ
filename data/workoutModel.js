@@ -121,6 +121,8 @@ export const seedWorkouts = [
 export function normalizeWorkout(input = {}) {
   const now = new Date().toISOString();
   const workoutType = input.workoutType || input.label || "general";
+  const intervals = normalizeIntervals(input.intervals || input.laps || input.workout_laps || []);
+  const intervalProfile = inferIntervalProfile(intervals);
 
   return {
     id: String(input.id || createWorkoutId(input.source || "manual")),
@@ -138,7 +140,11 @@ export function normalizeWorkout(input = {}) {
     load: numberOrZero(input.load ?? input.trainingLoad ?? input.training_load),
     avgPace: String(input.avgPace || input.avg_pace || ""),
     elevationGain: numberOrZero(input.elevationGain ?? input.elevation_gain),
-    intervals: normalizeIntervals(input.intervals || input.laps || input.workout_laps || []),
+    intervals,
+    intervalFamily: String(input.intervalFamily || input.interval_family || intervalProfile.intervalFamily || ""),
+    repDistanceMeters: numberOrZero(input.repDistanceMeters ?? input.rep_distance_meters) || intervalProfile.repDistanceMeters,
+    repCount: numberOrZero(input.repCount ?? input.rep_count) || intervalProfile.repCount,
+    qualityVolumeMeters: numberOrZero(input.qualityVolumeMeters ?? input.quality_volume_meters) || intervalProfile.qualityVolumeMeters,
     notes: String(input.notes || input.description || ""),
     createdAt: String(input.createdAt || input.created_at || now),
     updatedAt: String(input.updatedAt || input.updated_at || now),
@@ -201,6 +207,10 @@ export function normalizeCsvWorkout(record = {}) {
     avgPace: record.avgPace || record.avg_pace,
     elevationGain: record.elevationGain || record.elevation_gain,
     intervals: parseIntervals(record.intervals || record.laps || record.workout_laps),
+    intervalFamily: record.intervalFamily || record.interval_family,
+    repDistanceMeters: record.repDistanceMeters || record.rep_distance_meters,
+    repCount: record.repCount || record.rep_count,
+    qualityVolumeMeters: record.qualityVolumeMeters || record.quality_volume_meters,
     notes: record.notes,
   });
 }
@@ -283,4 +293,53 @@ function parseIntervals(value) {
   } catch {
     return [];
   }
+}
+
+function inferIntervalProfile(intervals) {
+  const qualityIntervals = intervals.filter((interval) => interval.distanceMeters || interval.durationSeconds);
+  if (!qualityIntervals.length) {
+    return {
+      intervalFamily: "",
+      repDistanceMeters: 0,
+      repCount: 0,
+      qualityVolumeMeters: 0,
+    };
+  }
+
+  const distances = qualityIntervals
+    .map((interval) => numberOrZero(interval.distanceMeters))
+    .filter((distance) => distance > 0);
+  const repDistanceMeters = mostCommonRoundedDistance(distances);
+  const matchingReps = repDistanceMeters
+    ? qualityIntervals.filter((interval) => Math.abs(numberOrZero(interval.distanceMeters) - repDistanceMeters) <= Math.max(25, repDistanceMeters * 0.03))
+    : qualityIntervals;
+  const repCount = matchingReps.length;
+  const qualityVolumeMeters = matchingReps.reduce((sum, interval) => sum + numberOrZero(interval.distanceMeters), 0);
+
+  return {
+    intervalFamily: repDistanceMeters ? `${formatDistanceLabel(repDistanceMeters)}-reps` : "intervals",
+    repDistanceMeters,
+    repCount,
+    qualityVolumeMeters,
+  };
+}
+
+function mostCommonRoundedDistance(distances) {
+  if (!distances.length) return 0;
+
+  const counts = distances.reduce((acc, distance) => {
+    const rounded = Math.round(distance / 50) * 50;
+    acc[rounded] = (acc[rounded] || 0) + 1;
+    return acc;
+  }, {});
+
+  return Number(Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]);
+}
+
+function formatDistanceLabel(distanceMeters) {
+  if (distanceMeters >= 1000 && distanceMeters % 1000 === 0) {
+    return `${distanceMeters / 1000}km`;
+  }
+
+  return `${distanceMeters}m`;
 }
