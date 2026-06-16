@@ -4,4 +4,6 @@
 node_modules/
 dist/
 .vercel/
+.tools/
+supabase/.temp/
 npm-debug.log*
