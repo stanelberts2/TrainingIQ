@@ -13,7 +13,11 @@ async function postToken(params) {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body.message || body.error || "Strava token request failed.");
+    const details = Array.isArray(body.errors)
+      ? body.errors.map((error) => [error.resource, error.field, error.code].filter(Boolean).join(".")).filter(Boolean)
+      : [];
+    const detailText = details.length ? ` (${details.join(", ")})` : "";
+    throw new Error(`${body.message || body.error || "Strava token request failed."}${detailText}`);
   }
 
   return body;
