@@ -39,6 +39,8 @@ export function intervalToSupabaseLapRow(interval, workoutId) {
     workout_id: workoutId,
     lap_index: interval.intervalIndex,
     name: interval.name,
+    exercise_type: interval.exerciseType || "",
+    lap_role: interval.lapRole || "work",
     start_offset_seconds: interval.startOffsetSeconds || 0,
     duration_seconds: interval.durationSeconds,
     distance_meters: interval.distanceMeters,
@@ -117,6 +119,8 @@ export function intervalsFromSupabaseLapRows(rows = []) {
     .map((row) => ({
       intervalIndex: row.lap_index,
       name: row.name,
+      exerciseType: row.exercise_type || "",
+      lapRole: row.lap_role || "work",
       startOffsetSeconds: row.start_offset_seconds,
       durationSeconds: row.duration_seconds,
       distanceMeters: row.distance_meters,

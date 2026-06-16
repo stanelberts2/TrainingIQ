@@ -645,7 +645,15 @@ textarea {
 }
 
 .interval-table-row {
-  grid-template-columns: 1.1fr 0.75fr 0.75fr 0.75fr 0.75fr 1fr;
+  grid-template-columns: 1.05fr 0.9fr 0.7fr 0.7fr 0.7fr 0.7fr 1fr;
+}
+
+.compact-select {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.86rem;
 }
 
 .segment-table-row {

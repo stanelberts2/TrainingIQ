@@ -20,6 +20,8 @@ Dit is het startpunt voor de volgende sessie.
   - Data-tab in de app voor URL, anon key, magic link, upload en download.
 - Strava OAuth is gekoppeld via Supabase Edge Functions.
 - Directe Strava-sync werkt via `strava-sync-now`: recente activities en laps worden naar `workouts` en `workout_laps` geschreven.
+- Strava historie-sync kan tot 500 activiteiten per run ophalen.
+- Laps kunnen in de analyse handmatig worden gelabeld met `exercise_type`, zodat SkiErg/Row/Bike rondes apart vergelijkbaar worden.
 - Audit quick wins zijn voorbereid: CORS-whitelist, webhook-deduplicatie, profielcontextvelden en `activity_streams`.
 
 ## Eerstvolgende Werk
@@ -38,8 +40,9 @@ http://127.0.0.1:5174/
 ```
 
 4. Ga naar Data.
-5. Klik `Recente Strava activiteiten syncen`.
-6. Controleer in Workouts/Analyse of laps, pace, HR en intervalprofielen kloppen.
+5. Klik `Strava historie syncen` als er meer vergelijkingsmateriaal nodig is.
+6. Open een gemengde erg-workout in Analyse en label de rondes als SkiErg, RowErg of Bike.
+7. Controleer in Workouts/Analyse of laps, pace, HR en intervalprofielen kloppen.
 
 ## Verwacht Resultaat
 

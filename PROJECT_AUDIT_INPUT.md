@@ -8,6 +8,8 @@ Aanvulling na externe audit: enkele veilige quick wins zijn verwerkt in de codeb
 - Er is een additive migration voor Strava webhook-deduplicatie toegevoegd.
 - `profiles` is voorbereid met HYROX-divisie, leeftijdsgroep en unit-system.
 - `activity_streams` is voorbereid als toekomstige tabel voor GPS/HR/pace/power streams.
+- `workout_laps` heeft nu `exercise_type` en `lap_role`, zodat gemengde erg-workouts per ronde als SkiErg/RowErg/Bike/etc. gelabeld kunnen worden.
+- `strava-sync-now` ondersteunt naast recente sync ook een begrensde historie-sync.
 - Grote breaking changes uit de audit, zoals `workouts.id` migreren naar UUID en tokenencryptie, zijn bewust nog niet uitgevoerd.
 
 Dit document vat de volledige huidige codebase samen voor een externe software architect. Het doel is beoordeling van architectuur, datamodel, security, schaalbaarheid, analytics-richting en technische schuld zonder directe toegang tot alle bronbestanden.

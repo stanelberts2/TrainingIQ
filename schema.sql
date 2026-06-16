@@ -78,6 +78,10 @@ create table if not exists workout_laps (
   workout_id text not null references workouts(id) on delete cascade,
   lap_index integer not null,
   name text not null default '',
+  exercise_type text not null default '' check (
+    exercise_type in ('', 'run', 'ski_erg', 'row_erg', 'bike_erg', 'strength', 'rest', 'transition', 'other')
+  ),
+  lap_role text not null default 'work' check (lap_role in ('work', 'recovery', 'warmup', 'cooldown', 'transition', 'unknown')),
   start_offset_seconds numeric not null default 0,
   duration_seconds numeric not null default 0,
   distance_meters numeric not null default 0,
@@ -200,6 +204,7 @@ create index if not exists workouts_user_type_idx on workouts (user_id, sport, w
 create index if not exists workouts_interval_family_idx on workouts (user_id, sport, workout_type, interval_family, date desc);
 create index if not exists workouts_source_external_idx on workouts (source, external_id);
 create index if not exists workout_laps_workout_idx on workout_laps (workout_id, lap_index);
+create index if not exists workout_laps_exercise_type_idx on workout_laps (exercise_type, workout_id);
 create index if not exists workout_segments_workout_idx on workout_segments (workout_id, segment_index);
 create index if not exists workout_segments_type_idx on workout_segments (segment_type, workout_id);
 create index if not exists detected_intervals_workout_idx on detected_intervals (workout_id, interval_index);

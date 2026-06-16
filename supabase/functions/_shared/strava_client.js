@@ -80,9 +80,10 @@ export async function fetchStravaActivity(accessToken, activityId) {
   return body;
 }
 
-export async function fetchStravaActivities(accessToken, limit = 10) {
-  const perPage = Math.min(Math.max(Number(limit) || 10, 1), 30);
-  const response = await fetch(`${STRAVA_API}/athlete/activities?per_page=${perPage}&page=1`, {
+export async function fetchStravaActivities(accessToken, limit = 10, page = 1) {
+  const perPage = Math.min(Math.max(Number(limit) || 10, 1), 100);
+  const pageNumber = Math.max(Number(page) || 1, 1);
+  const response = await fetch(`${STRAVA_API}/athlete/activities?per_page=${perPage}&page=${pageNumber}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

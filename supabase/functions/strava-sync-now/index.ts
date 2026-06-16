@@ -15,7 +15,10 @@ Deno.serve(async (req) => {
   try {
     const user = await requireUser(req);
     const body = await req.json().catch(() => ({}));
-    const limit = Math.min(Math.max(Number(body.limit) || 10, 1), 30);
+    const mode = String(body.mode || "recent");
+    const pageSize = mode === "history" ? 100 : Math.min(Math.max(Number(body.limit) || 10, 1), 30);
+    const maxPages = mode === "history" ? Math.min(Math.max(Number(body.maxPages) || 5, 1), 10) : 1;
+    const maxActivities = mode === "history" ? Math.min(Math.max(Number(body.maxActivities) || 500, 1), 1000) : pageSize;
     const supabase = createServiceClient();
 
     const { data: dataSource, error: sourceError } = await supabase
@@ -33,11 +36,17 @@ Deno.serve(async (req) => {
       .eq("id", dataSource.id);
 
     const accessToken = await getValidStravaToken(supabase, dataSource);
-    const summaries = await fetchStravaActivities(accessToken, limit);
+    const summaries = [];
+    for (let page = 1; page <= maxPages && summaries.length < maxActivities; page += 1) {
+      const pageActivities = await fetchStravaActivities(accessToken, pageSize, page);
+      summaries.push(...pageActivities);
+      if (pageActivities.length < pageSize) break;
+    }
+    const activitiesToImport = summaries.slice(0, maxActivities);
     let imported = 0;
     let lapCount = 0;
 
-    for (const summary of summaries) {
+    for (const summary of activitiesToImport) {
       const activityId = String(summary.id || "");
       if (!activityId) continue;
 
@@ -90,7 +99,8 @@ Deno.serve(async (req) => {
     return jsonResponse({
       imported,
       laps: lapCount,
-      checked: summaries.length,
+      checked: activitiesToImport.length,
+      mode,
     }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Strava sync mislukt.";

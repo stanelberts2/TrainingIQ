@@ -70,6 +70,7 @@ const els = {
   stravaConnectButton: document.querySelector("#stravaConnectButton"),
   stravaRefreshButton: document.querySelector("#stravaRefreshButton"),
   stravaSyncNowButton: document.querySelector("#stravaSyncNowButton"),
+  stravaSyncHistoryButton: document.querySelector("#stravaSyncHistoryButton"),
   stravaStatus: document.querySelector("#stravaStatus"),
   stravaStatusBadge: document.querySelector("#stravaStatusBadge"),
 };
@@ -84,6 +85,18 @@ const segmentTypeLabels = {
   sandbag_lunge: "Sandbag lunges",
   farmer_carry: "Farmer's carry",
   wall_ball: "Wall balls",
+  strength: "Kracht",
+  rest: "Rust",
+  transition: "Transitie",
+  other: "Overig",
+};
+
+const intervalExerciseTypeLabels = {
+  "": "Niet gelabeld",
+  run: "Run",
+  ski_erg: "SkiErg",
+  row_erg: "RowErg",
+  bike_erg: "Bike",
   strength: "Kracht",
   rest: "Rust",
   transition: "Transitie",
@@ -391,6 +404,7 @@ function renderIntervalComparison(selected, previous) {
     <div class="interval-table">
       <div class="interval-table-row interval-table-head">
         <strong>Blok</strong>
+        <strong>Onderdeel</strong>
         <strong>Afstand</strong>
         <strong>Tijd</strong>
         <strong>Pace</strong>
@@ -398,9 +412,7 @@ function renderIntervalComparison(selected, previous) {
         <strong>Vorige gem.</strong>
       </div>
       ${intervals.map((interval, index) => {
-        const previousMatches = previousWithIntervals
-          .map((workout) => workout.intervals[index])
-          .filter(Boolean);
+        const previousMatches = matchingPreviousIntervals(interval, index, previousWithIntervals);
         const previousAvgHr = average(previousMatches.map((item) => numberOrZero(item.avgHr)));
         const previousPace = average(previousMatches.map((item) => numberOrZero(item.durationSeconds)));
         const distanceKm = interval.distanceMeters ? (interval.distanceMeters / 1000).toFixed(2) : "-";
@@ -408,6 +420,11 @@ function renderIntervalComparison(selected, previous) {
         return `
           <div class="interval-table-row">
             <span>${interval.name || `Blok ${interval.intervalIndex}`}</span>
+            <span>
+              <select class="compact-select interval-exercise-select" data-interval-index="${interval.intervalIndex}" aria-label="Onderdeel voor ${interval.name || `blok ${interval.intervalIndex}`}">
+                ${Object.entries(intervalExerciseTypeLabels).map(([value, label]) => `<option value="${value}" ${value === (interval.exerciseType || "") ? "selected" : ""}>${label}</option>`).join("")}
+              </select>
+            </span>
             <span>${distanceKm === "-" ? "-" : `${distanceKm} km`}</span>
             <span>${formatSeconds(interval.durationSeconds)}</span>
             <span>${paceForInterval(interval)}</span>
@@ -418,6 +435,31 @@ function renderIntervalComparison(selected, previous) {
       }).join("")}
     </div>
   `;
+}
+
+function matchingPreviousIntervals(interval, index, previousWithIntervals) {
+  if (interval.exerciseType) {
+    return previousWithIntervals
+      .flatMap((workout) => workout.intervals || [])
+      .filter((candidate) => {
+        if (candidate.exerciseType !== interval.exerciseType) return false;
+        const distanceA = numberOrZero(interval.distanceMeters);
+        const distanceB = numberOrZero(candidate.distanceMeters);
+        const durationA = numberOrZero(interval.durationSeconds);
+        const durationB = numberOrZero(candidate.durationSeconds);
+        const distanceMatches = distanceA && distanceB
+          ? Math.abs(distanceA - distanceB) <= Math.max(25, distanceA * 0.05)
+          : false;
+        const durationMatches = durationA && durationB
+          ? Math.abs(durationA - durationB) <= Math.max(10, durationA * 0.1)
+          : false;
+        return distanceMatches || durationMatches || (!distanceA && !durationA);
+      });
+  }
+
+  return previousWithIntervals
+    .map((workout) => workout.intervals[index])
+    .filter(Boolean);
 }
 
 function renderSegmentAnalysis(selected, previous) {
@@ -733,7 +775,7 @@ async function handleStravaConnect() {
   }
 }
 
-async function handleStravaSyncNow() {
+async function handleStravaSyncNow(mode = "recent") {
   try {
     const user = await ensureSupabaseUser();
     if (!user) {
@@ -741,9 +783,18 @@ async function handleStravaSyncNow() {
       return;
     }
 
-    updateStravaStatus("Strava sync draait...", "Ik haal je recente activiteiten en laps op.", "idle");
+    const isHistory = mode === "history";
+    updateStravaStatus(
+      isHistory ? "Strava historie-sync draait..." : "Strava sync draait...",
+      isHistory ? "Ik haal tot 500 oudere activiteiten op. Dit kan even duren." : "Ik haal je recente activiteiten en laps op.",
+      "idle",
+    );
     const { syncStravaNow, loadSupabaseWorkouts } = await loadSupabaseModule();
-    const { result, error } = await syncStravaNow(10);
+    const { result, error } = await syncStravaNow(
+      isHistory
+        ? { mode: "history", maxPages: 5, maxActivities: 500 }
+        : { mode: "recent", limit: 10 },
+    );
     if (error) throw error;
 
     const { workouts, error: loadError } = await loadSupabaseWorkouts();
@@ -754,12 +805,50 @@ async function handleStravaSyncNow() {
     state.selectedWorkoutId = state.workouts[0]?.id || null;
     render();
     updateStravaStatus(
-      "Strava sync klaar.",
+      isHistory ? "Strava historie-sync klaar." : "Strava sync klaar.",
       `${result?.imported || 0} activiteit(en) verwerkt, ${result?.laps || 0} lap(s) opgeslagen.`,
       "ready",
     );
   } catch (error) {
     updateStravaStatus(error.message, "Controleer je Strava permissies en probeer opnieuw.", "error");
+  }
+}
+
+async function handleIntervalExerciseChange(event) {
+  const select = event.target.closest(".interval-exercise-select");
+  if (!select) return;
+
+  const selected = state.workouts.find((workout) => workout.id === state.selectedWorkoutId) || sortedWorkouts()[0];
+  if (!selected) return;
+
+  const intervalIndex = numberOrZero(select.dataset.intervalIndex);
+  const updatedWorkout = {
+    ...selected,
+    intervals: (selected.intervals || []).map((interval) => {
+      if (interval.intervalIndex !== intervalIndex) return interval;
+      return {
+        ...interval,
+        exerciseType: select.value,
+      };
+    }),
+    updatedAt: new Date().toISOString(),
+  };
+
+  state.workouts = state.workouts.map((workout) => workout.id === updatedWorkout.id ? updatedWorkout : workout);
+  saveWorkouts(state.workouts);
+  render();
+
+  try {
+    if (hasSupabaseConfig()) {
+      const user = await ensureSupabaseUser();
+      if (user) {
+        const { saveSupabaseWorkout } = await loadSupabaseModule();
+        const { error } = await saveSupabaseWorkout(updatedWorkout);
+        if (error) throw error;
+      }
+    }
+  } catch (error) {
+    updateStravaStatus("Onderdeel lokaal opgeslagen.", `Cloud-update lukte niet: ${error.message}`, "error");
   }
 }
 
@@ -1009,6 +1098,10 @@ function bindEvents() {
     render();
   });
 
+  els.intervalComparison.addEventListener("change", (event) => {
+    handleIntervalExerciseChange(event);
+  });
+
   els.csvInput.addEventListener("change", (event) => {
     importCsv(event.target.files[0]);
     event.target.value = "";
@@ -1049,7 +1142,11 @@ function bindEvents() {
   });
 
   els.stravaSyncNowButton.addEventListener("click", () => {
-    handleStravaSyncNow();
+    handleStravaSyncNow("recent");
+  });
+
+  els.stravaSyncHistoryButton.addEventListener("click", () => {
+    handleStravaSyncNow("history");
   });
 }
 

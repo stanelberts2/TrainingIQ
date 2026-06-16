@@ -72,12 +72,13 @@ export async function getStravaAuthUrl() {
   return { url: data?.url || "", error: null };
 }
 
-export async function syncStravaNow(limit = 10) {
+export async function syncStravaNow(options = 10) {
   const supabase = getSupabaseClient();
   if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
+  const body = typeof options === "number" ? { limit: options } : options;
 
   const { data, error } = await supabase.functions.invoke("strava-sync-now", {
-    body: { limit },
+    body,
   });
 
   return { result: data || null, error };

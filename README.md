@@ -18,6 +18,8 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - Handmatige Supabase-sync via de Data-tab: magic-link login, lokale workouts plus intervalblokken uploaden en cloud-workouts ophalen.
 - Strava OAuth via Supabase Edge Functions.
 - Handmatige Strava-sync via `Recente Strava activiteiten syncen`: recente activities en laps worden naar Supabase geschreven.
+- Uitgebreidere Strava-historie-sync via `Strava historie syncen`, begrensd per run om Edge Function timeouts en API-limieten te voorkomen.
+- Geimporteerde laps kunnen in de analyse worden gelabeld als Run, SkiErg, RowErg, Bike, rust of overig. Deze labels worden opgeslagen in `workout_laps.exercise_type` voor betere vergelijkingen.
 - Voorbereidende `activity_streams` tabel voor latere GPS/HR/pace/power streams en automatische intervaldetectie.
 
 ## Lokaal draaien
@@ -156,7 +158,8 @@ GitHub is alleen voor code. Vercel host de app. Supabase bewaart je trainingsdat
 
 De logische volgende stap is datakwaliteit en analyse:
 
-1. Controleren of Strava-imports datum, duur, afstand, HR en laps correct vullen.
-2. Strava streams toevoegen voor GPS/HR/pace/power-tijdreeksen.
-3. Automatische intervalherkenning bouwen bovenop streams.
-4. Training load, HR-zones en HYROX-stationprogressie slimmer maken.
+1. Laps van gemengde erg-workouts labelen als SkiErg, RowErg of Bike.
+2. Historie-sync draaien totdat vergelijkingsmateriaal voor VO2/intervaltrainingen aanwezig is.
+3. Strava streams toevoegen voor GPS/HR/pace/power-tijdreeksen.
+4. Automatische intervalherkenning bouwen bovenop streams.
+5. Training load, HR-zones en HYROX-stationprogressie slimmer maken.

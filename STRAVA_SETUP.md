@@ -81,6 +81,8 @@ Strava valideert deze callback met een GET request. De functie geeft de vereiste
 - Nieuwe of bijgewerkte Strava activiteiten komen via de webhook binnen.
 - De importer haalt de activiteit en laps op en schrijft ze naar `workouts` en `workout_laps`.
 - Via de Data-tab kan `Recente Strava activiteiten syncen` handmatig de laatste activiteiten ophalen zonder webhook.
+- Via `Strava historie syncen` kan een grotere batch geschiedenis worden opgehaald. Deze run is bewust begrensd om timeouts/API-limieten te voorkomen.
+- Geimporteerde laps kunnen in de analyse worden gelabeld als Run, SkiErg, RowErg of Bike voor betere vergelijkingen.
 - Daarna kun je in TrainingIQ `Cloud workouts ophalen` gebruiken om de nieuwe activiteit lokaal zichtbaar te maken.
 
 Strava geeft niet automatisch HYROX stations zoals sled push of wall balls als aparte stations mee. Die blijven voorlopig handmatig of via latere herkenning uit streams/notes.

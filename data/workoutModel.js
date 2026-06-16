@@ -318,6 +318,8 @@ function normalizeIntervals(intervals = []) {
       return {
         intervalIndex: numberOrZero(interval.intervalIndex ?? interval.interval_index ?? interval.lapIndex ?? interval.lap_index) || index + 1,
         name: String(interval.name || interval.label || `Interval ${index + 1}`).trim(),
+        exerciseType: normalizeIntervalExerciseType(interval.exerciseType || interval.exercise_type),
+        lapRole: normalizeLapRole(interval.lapRole || interval.lap_role),
         startOffsetSeconds: numberOrZero(interval.startOffsetSeconds ?? interval.start_offset_seconds),
         durationSeconds: normalizeDurationSeconds(interval.durationSeconds ?? interval.duration_seconds ?? interval.durationText),
         distanceMeters: numberOrZero(interval.distanceMeters ?? interval.distance_meters) || Math.round(distanceKm * 1000),
@@ -393,6 +395,18 @@ function normalizeSegments(segments = []) {
 function normalizeSegmentType(type) {
   const normalized = String(type || "other").trim().toLowerCase().replace(/[\s-]+/g, "_");
   return hyroxSegmentTypes.includes(normalized) ? normalized : "other";
+}
+
+function normalizeIntervalExerciseType(type) {
+  const allowed = ["", "run", "ski_erg", "row_erg", "bike_erg", "strength", "rest", "transition", "other"];
+  const normalized = String(type || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return allowed.includes(normalized) ? normalized : "";
+}
+
+function normalizeLapRole(role) {
+  const allowed = ["work", "recovery", "warmup", "cooldown", "transition", "unknown"];
+  const normalized = String(role || "work").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return allowed.includes(normalized) ? normalized : "work";
 }
 
 function clamp(value, min, max) {
