@@ -80,6 +80,22 @@ export async function fetchStravaActivity(accessToken, activityId) {
   return body;
 }
 
+export async function fetchStravaActivities(accessToken, limit = 10) {
+  const perPage = Math.min(Math.max(Number(limit) || 10, 1), 30);
+  const response = await fetch(`${STRAVA_API}/athlete/activities?per_page=${perPage}&page=1`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const body = await response.json().catch(() => []);
+  if (!response.ok) {
+    throw new Error(body.message || "Strava activities request failed.");
+  }
+
+  return Array.isArray(body) ? body : [];
+}
+
 export async function fetchStravaActivityLaps(accessToken, activityId) {
   const response = await fetch(`${STRAVA_API}/activities/${activityId}/laps`, {
     headers: {

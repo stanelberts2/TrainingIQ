@@ -72,6 +72,17 @@ export async function getStravaAuthUrl() {
   return { url: data?.url || "", error: null };
 }
 
+export async function syncStravaNow(limit = 10) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
+
+  const { data, error } = await supabase.functions.invoke("strava-sync-now", {
+    body: { limit },
+  });
+
+  return { result: data || null, error };
+}
+
 export async function loadSupabaseWorkouts() {
   const supabase = getSupabaseClient();
   if (!supabase) return { workouts: [], error: new Error("Supabase is not configured.") };

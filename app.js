@@ -69,6 +69,7 @@ const els = {
   supabaseStatusBadge: document.querySelector("#supabaseStatusBadge"),
   stravaConnectButton: document.querySelector("#stravaConnectButton"),
   stravaRefreshButton: document.querySelector("#stravaRefreshButton"),
+  stravaSyncNowButton: document.querySelector("#stravaSyncNowButton"),
   stravaStatus: document.querySelector("#stravaStatus"),
   stravaStatusBadge: document.querySelector("#stravaStatusBadge"),
 };
@@ -732,6 +733,36 @@ async function handleStravaConnect() {
   }
 }
 
+async function handleStravaSyncNow() {
+  try {
+    const user = await ensureSupabaseUser();
+    if (!user) {
+      updateStravaStatus("Nog geen Supabase-sessie.", "Login eerst met je magic link.", "error");
+      return;
+    }
+
+    updateStravaStatus("Strava sync draait...", "Ik haal je recente activiteiten en laps op.", "idle");
+    const { syncStravaNow, loadSupabaseWorkouts } = await loadSupabaseModule();
+    const { result, error } = await syncStravaNow(10);
+    if (error) throw error;
+
+    const { workouts, error: loadError } = await loadSupabaseWorkouts();
+    if (loadError) throw loadError;
+
+    state.workouts = sortWorkoutsByDate(workouts);
+    saveWorkouts(state.workouts);
+    state.selectedWorkoutId = state.workouts[0]?.id || null;
+    render();
+    updateStravaStatus(
+      "Strava sync klaar.",
+      `${result?.imported || 0} activiteit(en) verwerkt, ${result?.laps || 0} lap(s) opgeslagen.`,
+      "ready",
+    );
+  } catch (error) {
+    updateStravaStatus(error.message, "Controleer je Strava permissies en probeer opnieuw.", "error");
+  }
+}
+
 function handleStravaCallbackResult() {
   const params = new URLSearchParams(window.location.search);
   const status = params.get("strava");
@@ -1015,6 +1046,10 @@ function bindEvents() {
 
   els.stravaRefreshButton.addEventListener("click", () => {
     refreshStravaStatus();
+  });
+
+  els.stravaSyncNowButton.addEventListener("click", () => {
+    handleStravaSyncNow();
   });
 }
 
