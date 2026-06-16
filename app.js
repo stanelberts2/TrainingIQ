@@ -672,8 +672,22 @@ async function refreshSupabaseUser() {
   }
 }
 
+async function ensureSupabaseUser() {
+  const { getCurrentUser } = await loadSupabaseModule();
+  const { user, error } = await getCurrentUser();
+  if (error) throw error;
+  state.supabaseUser = user;
+  return user;
+}
+
 async function refreshStravaStatus() {
   try {
+    const user = await ensureSupabaseUser();
+    updateSupabaseStatus(
+      user ? "Ingelogd bij Supabase." : "Config opgeslagen. Login om te syncen.",
+      user ? "ready" : "idle",
+    );
+
     if (!state.supabaseUser) {
       updateStravaStatus("Nog geen Supabase-sessie.", "Login eerst met je magic link.", "idle");
       return;
@@ -701,6 +715,12 @@ async function refreshStravaStatus() {
 
 async function handleStravaConnect() {
   try {
+    const user = await ensureSupabaseUser();
+    if (!user) {
+      updateStravaStatus("Nog geen Supabase-sessie.", "Login eerst met je magic link.", "error");
+      return;
+    }
+
     updateStravaStatus("Strava autorisatie wordt voorbereid...", "Je wordt zo naar Strava gestuurd.", "idle");
     const { getStravaAuthUrl } = await loadSupabaseModule();
     const { url, error } = await getStravaAuthUrl();
@@ -710,6 +730,26 @@ async function handleStravaConnect() {
   } catch (error) {
     updateStravaStatus(error.message, "Controleer Supabase login, secrets en Edge Functions.", "error");
   }
+}
+
+function handleStravaCallbackResult() {
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("strava");
+  if (!status) return;
+
+  const message = params.get("message") || "";
+  if (status === "connected") {
+    updateStravaStatus("Strava gekoppeld.", "Klik op Status ophalen om de koppeling te controleren.", "ready");
+    refreshStravaStatus();
+  } else {
+    updateStravaStatus(
+      "Strava koppelen mislukt.",
+      message || "Controleer de Authorization Callback Domain in je Strava Developer App.",
+      "error",
+    );
+  }
+
+  window.history.replaceState({}, "", window.location.pathname);
 }
 
 async function handleSupabaseLogin() {
@@ -991,6 +1031,7 @@ function init() {
   renderSupabaseConfig();
   refreshSupabaseUser();
   updateStravaStatus("Strava nog niet gekoppeld.");
+  handleStravaCallbackResult();
   render();
 }
 
