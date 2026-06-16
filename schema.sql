@@ -82,6 +82,9 @@ create table if not exists workout_laps (
     exercise_type in ('', 'run', 'ski_erg', 'row_erg', 'bike_erg', 'strength', 'rest', 'transition', 'other')
   ),
   lap_role text not null default 'work' check (lap_role in ('work', 'recovery', 'warmup', 'cooldown', 'transition', 'unknown')),
+  effort_goal text not null default '' check (
+    effort_goal in ('', 'z1', 'z2', 'z3', 'threshold', 'vo2max', 'all_out', 'race_pace', 'recovery', 'technique', 'other')
+  ),
   start_offset_seconds numeric not null default 0,
   duration_seconds numeric not null default 0,
   distance_meters numeric not null default 0,
@@ -91,6 +94,14 @@ create table if not exists workout_laps (
   raw_payload jsonb not null default '{}'::jsonb,
   unique (workout_id, lap_index)
 );
+
+alter table workout_laps
+  add column if not exists exercise_type text not null default ''
+    check (exercise_type in ('', 'run', 'ski_erg', 'row_erg', 'bike_erg', 'strength', 'rest', 'transition', 'other')),
+  add column if not exists lap_role text not null default 'work'
+    check (lap_role in ('work', 'recovery', 'warmup', 'cooldown', 'transition', 'unknown')),
+  add column if not exists effort_goal text not null default ''
+    check (effort_goal in ('', 'z1', 'z2', 'z3', 'threshold', 'vo2max', 'all_out', 'race_pace', 'recovery', 'technique', 'other'));
 
 create table if not exists workout_segments (
   id uuid primary key default gen_random_uuid(),
@@ -205,6 +216,7 @@ create index if not exists workouts_interval_family_idx on workouts (user_id, sp
 create index if not exists workouts_source_external_idx on workouts (source, external_id);
 create index if not exists workout_laps_workout_idx on workout_laps (workout_id, lap_index);
 create index if not exists workout_laps_exercise_type_idx on workout_laps (exercise_type, workout_id);
+create index if not exists workout_laps_effort_goal_idx on workout_laps (effort_goal, workout_id);
 create index if not exists workout_segments_workout_idx on workout_segments (workout_id, segment_index);
 create index if not exists workout_segments_type_idx on workout_segments (segment_type, workout_id);
 create index if not exists detected_intervals_workout_idx on detected_intervals (workout_id, interval_index);

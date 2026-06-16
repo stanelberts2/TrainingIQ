@@ -645,7 +645,7 @@ textarea {
 }
 
 .interval-table-row {
-  grid-template-columns: 1.05fr 0.9fr 0.7fr 0.7fr 0.7fr 0.7fr 1fr;
+  grid-template-columns: 1.05fr 0.9fr 0.8fr 0.7fr 0.7fr 0.7fr 0.7fr 1fr;
 }
 
 .compact-select {

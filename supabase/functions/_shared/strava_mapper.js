@@ -113,6 +113,7 @@ export function mapStravaActivityToWorkoutRows(activity = {}, laps = [], userId)
     name: lap.name || `Lap ${index + 1}`,
     exercise_type: "",
     lap_role: "work",
+    effort_goal: "",
     start_offset_seconds: numberOrZero(lap.start_index ?? lap.start_offset_seconds),
     duration_seconds: numberOrZero(lap.moving_time || lap.elapsed_time),
     distance_meters: numberOrZero(lap.distance),

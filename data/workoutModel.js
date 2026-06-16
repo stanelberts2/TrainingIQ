@@ -320,6 +320,7 @@ function normalizeIntervals(intervals = []) {
         name: String(interval.name || interval.label || `Interval ${index + 1}`).trim(),
         exerciseType: normalizeIntervalExerciseType(interval.exerciseType || interval.exercise_type),
         lapRole: normalizeLapRole(interval.lapRole || interval.lap_role),
+        effortGoal: normalizeEffortGoal(interval.effortGoal || interval.effort_goal),
         startOffsetSeconds: numberOrZero(interval.startOffsetSeconds ?? interval.start_offset_seconds),
         durationSeconds: normalizeDurationSeconds(interval.durationSeconds ?? interval.duration_seconds ?? interval.durationText),
         distanceMeters: numberOrZero(interval.distanceMeters ?? interval.distance_meters) || Math.round(distanceKm * 1000),
@@ -407,6 +408,12 @@ function normalizeLapRole(role) {
   const allowed = ["work", "recovery", "warmup", "cooldown", "transition", "unknown"];
   const normalized = String(role || "work").trim().toLowerCase().replace(/[\s-]+/g, "_");
   return allowed.includes(normalized) ? normalized : "work";
+}
+
+function normalizeEffortGoal(goal) {
+  const allowed = ["", "z1", "z2", "z3", "threshold", "vo2max", "all_out", "race_pace", "recovery", "technique", "other"];
+  const normalized = String(goal || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return allowed.includes(normalized) ? normalized : "";
 }
 
 function clamp(value, min, max) {

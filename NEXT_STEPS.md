@@ -22,6 +22,7 @@ Dit is het startpunt voor de volgende sessie.
 - Directe Strava-sync werkt via `strava-sync-now`: recente activities en laps worden naar `workouts` en `workout_laps` geschreven.
 - Strava historie-sync kan tot 500 activiteiten per run ophalen.
 - Laps kunnen in de analyse handmatig worden gelabeld met `exercise_type`, zodat SkiErg/Row/Bike rondes apart vergelijkbaar worden.
+- Laps kunnen met `effort_goal` worden gelabeld, bijvoorbeeld Z2 of all-out. Re-sync vanuit Strava behoudt deze handmatige labels.
 - Audit quick wins zijn voorbereid: CORS-whitelist, webhook-deduplicatie, profielcontextvelden en `activity_streams`.
 
 ## Eerstvolgende Werk
@@ -42,7 +43,8 @@ http://127.0.0.1:5174/
 4. Ga naar Data.
 5. Klik `Strava historie syncen` als er meer vergelijkingsmateriaal nodig is.
 6. Open een gemengde erg-workout in Analyse en label de rondes als SkiErg, RowErg of Bike.
-7. Controleer in Workouts/Analyse of laps, pace, HR en intervalprofielen kloppen.
+7. Zet bij Z2-blokken het doel op `Z2`, zodat vergelijkingen alleen met vergelijkbare Z2-blokken gebeuren.
+8. Controleer in Workouts/Analyse of laps, pace, HR en intervalprofielen kloppen.
 
 ## Verwacht Resultaat
 

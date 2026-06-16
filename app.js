@@ -103,6 +103,20 @@ const intervalExerciseTypeLabels = {
   other: "Overig",
 };
 
+const effortGoalLabels = {
+  "": "Geen doel",
+  z1: "Z1",
+  z2: "Z2",
+  z3: "Z3",
+  threshold: "Threshold",
+  vo2max: "VO2max",
+  all_out: "All-out",
+  race_pace: "Race pace",
+  recovery: "Herstel",
+  technique: "Techniek",
+  other: "Overig",
+};
+
 function sortedWorkouts(workouts = state.workouts) {
   return sortWorkoutsByDate(workouts);
 }
@@ -405,6 +419,7 @@ function renderIntervalComparison(selected, previous) {
       <div class="interval-table-row interval-table-head">
         <strong>Blok</strong>
         <strong>Onderdeel</strong>
+        <strong>Doel</strong>
         <strong>Afstand</strong>
         <strong>Tijd</strong>
         <strong>Pace</strong>
@@ -425,6 +440,11 @@ function renderIntervalComparison(selected, previous) {
                 ${Object.entries(intervalExerciseTypeLabels).map(([value, label]) => `<option value="${value}" ${value === (interval.exerciseType || "") ? "selected" : ""}>${label}</option>`).join("")}
               </select>
             </span>
+            <span>
+              <select class="compact-select interval-goal-select" data-interval-index="${interval.intervalIndex}" aria-label="Doel voor ${interval.name || `blok ${interval.intervalIndex}`}">
+                ${Object.entries(effortGoalLabels).map(([value, label]) => `<option value="${value}" ${value === (interval.effortGoal || "") ? "selected" : ""}>${label}</option>`).join("")}
+              </select>
+            </span>
             <span>${distanceKm === "-" ? "-" : `${distanceKm} km`}</span>
             <span>${formatSeconds(interval.durationSeconds)}</span>
             <span>${paceForInterval(interval)}</span>
@@ -438,11 +458,12 @@ function renderIntervalComparison(selected, previous) {
 }
 
 function matchingPreviousIntervals(interval, index, previousWithIntervals) {
-  if (interval.exerciseType) {
+  if (interval.exerciseType || interval.effortGoal) {
     return previousWithIntervals
       .flatMap((workout) => workout.intervals || [])
       .filter((candidate) => {
-        if (candidate.exerciseType !== interval.exerciseType) return false;
+        if (interval.exerciseType && candidate.exerciseType !== interval.exerciseType) return false;
+        if (interval.effortGoal && candidate.effortGoal !== interval.effortGoal) return false;
         const distanceA = numberOrZero(interval.distanceMeters);
         const distanceB = numberOrZero(candidate.distanceMeters);
         const durationA = numberOrZero(interval.durationSeconds);
@@ -815,7 +836,7 @@ async function handleStravaSyncNow(mode = "recent") {
 }
 
 async function handleIntervalExerciseChange(event) {
-  const select = event.target.closest(".interval-exercise-select");
+  const select = event.target.closest(".interval-exercise-select, .interval-goal-select");
   if (!select) return;
 
   const selected = state.workouts.find((workout) => workout.id === state.selectedWorkoutId) || sortedWorkouts()[0];
@@ -828,7 +849,8 @@ async function handleIntervalExerciseChange(event) {
       if (interval.intervalIndex !== intervalIndex) return interval;
       return {
         ...interval,
-        exerciseType: select.value,
+        exerciseType: select.classList.contains("interval-exercise-select") ? select.value : interval.exerciseType,
+        effortGoal: select.classList.contains("interval-goal-select") ? select.value : interval.effortGoal,
       };
     }),
     updatedAt: new Date().toISOString(),

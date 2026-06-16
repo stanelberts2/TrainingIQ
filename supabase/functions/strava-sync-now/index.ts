@@ -60,6 +60,15 @@ Deno.serve(async (req) => {
 
       if (workoutError) throw workoutError;
 
+      const { data: existingLaps, error: existingLapsError } = await supabase
+        .from("workout_laps")
+        .select("lap_index, exercise_type, lap_role, effort_goal")
+        .eq("workout_id", rows.workout.id);
+
+      if (existingLapsError) throw existingLapsError;
+
+      const lapsToInsert = mergeManualLapMetadata(rows.laps, existingLaps || []);
+
       const { error: deleteLapsError } = await supabase
         .from("workout_laps")
         .delete()
@@ -67,10 +76,10 @@ Deno.serve(async (req) => {
 
       if (deleteLapsError) throw deleteLapsError;
 
-      if (rows.laps.length) {
+      if (lapsToInsert.length) {
         const { error: insertLapsError } = await supabase
           .from("workout_laps")
-          .insert(rows.laps);
+          .insert(lapsToInsert);
 
         if (insertLapsError) throw insertLapsError;
       }
@@ -107,3 +116,19 @@ Deno.serve(async (req) => {
     return errorResponse(message, 400, req);
   }
 });
+
+function mergeManualLapMetadata(laps, existingLaps) {
+  const existingByIndex = new Map(existingLaps.map((lap) => [Number(lap.lap_index), lap]));
+
+  return laps.map((lap) => {
+    const existing = existingByIndex.get(Number(lap.lap_index));
+    if (!existing) return lap;
+
+    return {
+      ...lap,
+      exercise_type: existing.exercise_type || lap.exercise_type || "",
+      lap_role: existing.lap_role || lap.lap_role || "work",
+      effort_goal: existing.effort_goal || lap.effort_goal || "",
+    };
+  });
+}

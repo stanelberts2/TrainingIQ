@@ -20,6 +20,8 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - Handmatige Strava-sync via `Recente Strava activiteiten syncen`: recente activities en laps worden naar Supabase geschreven.
 - Uitgebreidere Strava-historie-sync via `Strava historie syncen`, begrensd per run om Edge Function timeouts en API-limieten te voorkomen.
 - Geimporteerde laps kunnen in de analyse worden gelabeld als Run, SkiErg, RowErg, Bike, rust of overig. Deze labels worden opgeslagen in `workout_laps.exercise_type` voor betere vergelijkingen.
+- Laps kunnen ook een doel krijgen zoals Z2, threshold, VO2max of all-out. Vergelijkingen gebruiken dit doel mee, zodat Z2 SkiErg-blokken niet met all-out HYROX-blokken worden gemengd.
+- Strava-herimport bewaart handmatig ingestelde lap-labels en doelen, zodat history-sync en latere updates bestaande context niet overschrijven.
 - Voorbereidende `activity_streams` tabel voor latere GPS/HR/pace/power streams en automatische intervaldetectie.
 
 ## Lokaal draaien

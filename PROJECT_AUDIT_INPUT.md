@@ -9,6 +9,8 @@ Aanvulling na externe audit: enkele veilige quick wins zijn verwerkt in de codeb
 - `profiles` is voorbereid met HYROX-divisie, leeftijdsgroep en unit-system.
 - `activity_streams` is voorbereid als toekomstige tabel voor GPS/HR/pace/power streams.
 - `workout_laps` heeft nu `exercise_type` en `lap_role`, zodat gemengde erg-workouts per ronde als SkiErg/RowErg/Bike/etc. gelabeld kunnen worden.
+- `workout_laps` heeft nu ook `effort_goal`, zodat bijvoorbeeld Z2 SkiErg-rondes apart vergeleken worden van all-out HYROX-rondes.
+- Strava-herimport merge't bestaande handmatige lapmetadata terug op basis van `lap_index`, zodat labels/doelen behouden blijven.
 - `strava-sync-now` ondersteunt naast recente sync ook een begrensde historie-sync.
 - Grote breaking changes uit de audit, zoals `workouts.id` migreren naar UUID en tokenencryptie, zijn bewust nog niet uitgevoerd.
 
