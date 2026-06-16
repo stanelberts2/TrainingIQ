@@ -6,65 +6,53 @@ Dit is het startpunt voor de volgende sessie.
 
 - GitHub staat goed en is schoon gepusht naar `stanelberts2/TrainingIQ`.
 - De app draait lokaal als statische ES-module app.
-- Workouts worden nu lokaal bewaard in `localStorage`.
+- Workouts worden lokaal gecachet in `localStorage` en kunnen naar Supabase worden gesynchroniseerd.
 - De handmatige invoer bevat nu de V1-velden: datum, starttijd, sport, titel, type, duur, afstand, gemiddelde HR, max HR, load, pace, hoogtemeters en notities.
 - Intervalblokken zijn toegevoegd voor trainingen zoals 5 x 1 km, inclusief afstand, tijd, pace, gemiddelde HR en max HR per blok.
 - Intervalprofielen worden automatisch afgeleid voor overload-analyse: bijvoorbeeld `1km-reps` of `10min-reps`, rep-afstand/repduur, aantal reps, kwaliteitsvolume en kwaliteitstijd.
 - HYROX-stations zijn invoerbaar in de app en worden opgeslagen als `workout_segments`, zodat run, SkiErg, RowErg, sled push/pull, burpees, lunges, farmer's carry, wall balls en krachtblokken analyseerbaar blijven binnen dezelfde workout.
 - PR's en doelen zijn voorbereid als `personal_records` en `training_goals`.
-- Supabase is voorbereid met:
+- Supabase is ingericht met:
   - `schema.sql`
   - `lib/supabase.js`
   - `data/supabaseWorkoutMapper.js`
   - `data/supabaseWorkoutStore.js`
   - Data-tab in de app voor URL, anon key, magic link, upload en download.
+- Strava OAuth is gekoppeld via Supabase Edge Functions.
+- Directe Strava-sync werkt via `strava-sync-now`: recente activities en laps worden naar `workouts` en `workout_laps` geschreven.
+- Audit quick wins zijn voorbereid: CORS-whitelist, webhook-deduplicatie, profielcontextvelden en `activity_streams`.
 
-## Morgen Eerst Doen
+## Eerstvolgende Werk
 
-1. Maak een nieuw Supabase-project aan.
-2. Open Supabase SQL Editor.
-3. Plak de volledige inhoud van `schema.sql`.
-4. Run het schema.
-5. Ga naar Authentication > URL Configuration.
-6. Zet voorlopig Site URL op:
-
-```text
-http://127.0.0.1:5173
-```
-
-7. Start TrainIQ lokaal:
+1. Run nieuwe migraties in Supabase als ze nog niet toegepast zijn.
+2. Start TrainIQ lokaal:
 
 ```bash
-python3 -m http.server 5173 --bind 127.0.0.1
+python3 -m http.server 5174 --bind 127.0.0.1
 ```
 
-8. Open:
+3. Open:
 
 ```text
-http://127.0.0.1:5173/
+http://127.0.0.1:5174/
 ```
 
-9. Vul in de Data-tab de Supabase URL en anon key in.
-10. Stuur een magic link naar je e-mail.
-11. Upload lokale workouts.
-12. Haal cloud-workouts op als controle.
+4. Ga naar Data.
+5. Klik `Recente Strava activiteiten syncen`.
+6. Controleer in Workouts/Analyse of laps, pace, HR en intervalprofielen kloppen.
 
 ## Verwacht Resultaat
 
-Na deze stap staat de basis-sync:
+Na deze stap is de Strava-datakwaliteit gecontroleerd:
 
-- workouts blijven lokaal bruikbaar;
-- workouts kunnen naar Supabase;
+- workouts blijven lokaal bruikbaar en cloud-backed;
 - intervalblokken worden opgeslagen in `workout_laps`;
 - HYROX-stations worden opgeslagen in `workout_segments`;
-- PR's en doelen kunnen later opgeslagen worden in `personal_records` en `training_goals`;
-- dezelfde data kan later op telefoon geladen worden;
-- Strava-import kan daarna bovenop deze basis gebouwd worden.
+- Strava-activiteiten worden via directe sync geïmporteerd;
+- dezelfde data kan later op telefoon geladen worden.
 
-## Niet Nu Doen
+## Niet Nu Blind Doen
 
-- Nog geen Strava OAuth.
-- Nog geen automatische Garmin-flow.
-- Nog geen uitgebreide analyseblokken.
-
-Eerst moet de cloud-opslag betrouwbaar werken met een paar workouts.
+- Geen grote `workouts.id` -> UUID migratie zonder ontwerp en testplan.
+- Geen tokenencryptie-refactor zonder gecontroleerde secrets/key-strategie.
+- Geen AI/readiness features voordat streams, zones en load-model betrouwbaar zijn.

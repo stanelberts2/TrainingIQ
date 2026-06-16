@@ -1,16 +1,16 @@
-import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.js";
+import { errorResponse, getCorsHeaders, jsonResponse } from "../_shared/cors.js";
 import { createServiceClient, getEnv } from "../_shared/supabase_clients.js";
 import { fetchStravaActivity, fetchStravaActivityLaps, getValidStravaToken } from "../_shared/strava_client.js";
 import { mapStravaActivityToWorkoutRows } from "../_shared/strava_mapper.js";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return errorResponse("Method not allowed.", 405);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
+  if (req.method !== "POST") return errorResponse("Method not allowed.", 405, req);
 
   try {
     const internalSecret = getEnv("STRAVA_INTERNAL_SECRET");
     if (req.headers.get("x-internal-secret") !== internalSecret) {
-      return errorResponse("Unauthorized.", 401);
+      return errorResponse("Unauthorized.", 401, req);
     }
 
     const { userId, activityId } = await req.json();
@@ -80,9 +80,9 @@ Deno.serve(async (req) => {
       imported: true,
       workoutId: rows.workout.id,
       laps: rows.laps.length,
-    });
+    }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Strava import mislukt.";
-    return errorResponse(message, 400);
+    return errorResponse(message, 400, req);
   }
 });

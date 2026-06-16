@@ -1,4 +1,4 @@
-import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.js";
+import { errorResponse, getCorsHeaders, jsonResponse } from "../_shared/cors.js";
 import { createServiceClient, requireUser } from "../_shared/supabase_clients.js";
 import {
   fetchStravaActivities,
@@ -9,8 +9,8 @@ import {
 import { mapStravaActivityToWorkoutRows } from "../_shared/strava_mapper.js";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return errorResponse("Method not allowed.", 405);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
+  if (req.method !== "POST") return errorResponse("Method not allowed.", 405, req);
 
   try {
     const user = await requireUser(req);
@@ -91,9 +91,9 @@ Deno.serve(async (req) => {
       imported,
       laps: lapCount,
       checked: summaries.length,
-    });
+    }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Strava sync mislukt.";
-    return errorResponse(message, 400);
+    return errorResponse(message, 400, req);
   }
 });

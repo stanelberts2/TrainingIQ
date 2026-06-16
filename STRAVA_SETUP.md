@@ -48,6 +48,7 @@ strava-auth-url
 strava-oauth-callback
 strava-webhook
 strava-import-activity
+strava-sync-now
 ```
 
 JWT-verificatie:
@@ -57,6 +58,7 @@ strava-auth-url: JWT verificatie AAN
 strava-oauth-callback: JWT verificatie UIT
 strava-webhook: JWT verificatie UIT
 strava-import-activity: JWT verificatie UIT
+strava-sync-now: JWT verificatie AAN
 ```
 
 De callback en webhook moeten publiek bereikbaar zijn voor Strava. De import-functie is alsnog beschermd met `STRAVA_INTERNAL_SECRET`.
@@ -78,6 +80,7 @@ Strava valideert deze callback met een GET request. De functie geeft de vereiste
 - Tokens worden server-side in Supabase opgeslagen.
 - Nieuwe of bijgewerkte Strava activiteiten komen via de webhook binnen.
 - De importer haalt de activiteit en laps op en schrijft ze naar `workouts` en `workout_laps`.
+- Via de Data-tab kan `Recente Strava activiteiten syncen` handmatig de laatste activiteiten ophalen zonder webhook.
 - Daarna kun je in TrainingIQ `Cloud workouts ophalen` gebruiken om de nieuwe activiteit lokaal zichtbaar te maken.
 
 Strava geeft niet automatisch HYROX stations zoals sled push of wall balls als aparte stations mee. Die blijven voorlopig handmatig of via latere herkenning uit streams/notes.

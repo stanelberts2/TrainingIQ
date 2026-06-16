@@ -1,4 +1,4 @@
-import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.js";
+import { errorResponse, getCorsHeaders, jsonResponse } from "../_shared/cors.js";
 import { createServiceClient, getEnv } from "../_shared/supabase_clients.js";
 import { mapStravaWebhookEvent } from "../_shared/strava_mapper.js";
 
@@ -26,20 +26,20 @@ async function triggerImport(userId: string, activityId: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
   const url = new URL(req.url);
   if (req.method === "GET") {
     const verifyToken = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
     if (verifyToken !== getEnv("STRAVA_VERIFY_TOKEN") || !challenge) {
-      return errorResponse("Invalid verify token.", 403);
+      return errorResponse("Invalid verify token.", 403, req);
     }
 
-    return jsonResponse({ "hub.challenge": challenge });
+    return jsonResponse({ "hub.challenge": challenge }, 200, req);
   }
 
-  if (req.method !== "POST") return errorResponse("Method not allowed.", 405);
+  if (req.method !== "POST") return errorResponse("Method not allowed.", 405, req);
 
   try {
     const payload = await req.json();
@@ -82,9 +82,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    return jsonResponse({ received: true });
+    return jsonResponse({ received: true }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Webhook verwerking mislukt.";
-    return errorResponse(message, 400);
+    return errorResponse(message, 400, req);
   }
 });

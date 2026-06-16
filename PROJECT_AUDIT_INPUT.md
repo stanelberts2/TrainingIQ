@@ -2,6 +2,14 @@
 
 Laatste auditupdate: 2026-06-16
 
+Aanvulling na externe audit: enkele veilige quick wins zijn verwerkt in de codebase:
+
+- CORS is aangepast van wildcard naar een kleine origin-whitelist rond `APP_URL`, localhost en `127.0.0.1`.
+- Er is een additive migration voor Strava webhook-deduplicatie toegevoegd.
+- `profiles` is voorbereid met HYROX-divisie, leeftijdsgroep en unit-system.
+- `activity_streams` is voorbereid als toekomstige tabel voor GPS/HR/pace/power streams.
+- Grote breaking changes uit de audit, zoals `workouts.id` migreren naar UUID en tokenencryptie, zijn bewust nog niet uitgevoerd.
+
 Dit document vat de volledige huidige codebase samen voor een externe software architect. Het doel is beoordeling van architectuur, datamodel, security, schaalbaarheid, analytics-richting en technische schuld zonder directe toegang tot alle bronbestanden.
 
 ## 1. Volledige Mapstructuur
@@ -365,7 +373,7 @@ RLS is ingeschakeld voor:
 - `personal_records_own_all`: user mag eigen PRs beheren.
 - `training_goals_own_all`: user mag eigen doelen beheren.
 - `oauth_states_own_all`: user mag eigen OAuth states beheren.
-- `strava_webhook_events_select_own`: user mag eigen webhook events lezen.
+- `strava_webhook_events_select_own`: user mag eigen webhook events lezen. Duplicaten worden voorbereid met een unieke index op owner/object/aspect/event-time.
 - `strava_import_logs_select_own`: user mag eigen import logs lezen.
 
 ### Security-samenvatting
@@ -375,7 +383,7 @@ Client-side toegang is owner-scoped via RLS. Edge Functions gebruiken `SUPABASE_
 ### Security-risico's
 
 - `access_token_encrypted` en `refresh_token_encrypted` zijn niet aantoonbaar applicatie-encrypted; kolomnamen suggereren encryptie, maar code slaat tokenstrings direct op.
-- CORS staat momenteel breed op `Access-Control-Allow-Origin: *`.
+- CORS is niet langer wildcard en gebruikt een origin-whitelist. Voor productie moet deze lijst naar alleen echte app-domeinen worden teruggebracht.
 - `strava-import-activity` is publiek bereikbaar met JWT verificatie uit en vertrouwt op `STRAVA_INTERNAL_SECRET`.
 - `strava-webhook` is publiek bereikbaar en valideert alleen GET-verificatie met verify token; POST vertrouwt op Strava payload + owner mapping.
 - `strava-sync-now` vereist user JWT via `requireUser`, wat de juiste default is.
@@ -386,7 +394,7 @@ Client-side toegang is owner-scoped via RLS. Edge Functions gebruiken `SUPABASE_
 
 #### `_shared/cors.js`
 
-Levert `corsHeaders`, `jsonResponse` en `errorResponse`. CORS is momenteel permissive.
+Levert request-aware CORS headers, `jsonResponse` en `errorResponse`. CORS gebruikt nu een kleine allowlist in plaats van wildcard.
 
 #### `_shared/supabase_clients.js`
 
@@ -773,7 +781,7 @@ Maar veel hiervan is nog niet server-side geaggregeerd of visueel uitgewerkt.
 ### Security
 
 - Tokenkolommen heten `*_encrypted`, maar applicatielaag-encryptie ontbreekt zichtbaar.
-- CORS is breed (`*`).
+- CORS is verbeterd naar een origin-whitelist, maar bevat nog localhost voor lokale ontwikkeling.
 - `strava-import-activity` vertrouwt op een shared internal secret.
 - Geen rate limiting op Edge Functions.
 - Geen audit op token rotation failures behalve `last_error` en logs.

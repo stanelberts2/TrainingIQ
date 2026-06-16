@@ -16,6 +16,9 @@ Persoonlijke trainingshub voor workouts, basisanalyse en later Strava/Supabase-s
 - Centrale workout-data-laag in `data/workoutModel.js` en `data/workoutStore.js`.
 - Supabase-voorbereiding in `schema.sql`, `data/supabaseWorkoutMapper.js` en `data/supabaseWorkoutStore.js`.
 - Handmatige Supabase-sync via de Data-tab: magic-link login, lokale workouts plus intervalblokken uploaden en cloud-workouts ophalen.
+- Strava OAuth via Supabase Edge Functions.
+- Handmatige Strava-sync via `Recente Strava activiteiten syncen`: recente activities en laps worden naar Supabase geschreven.
+- Voorbereidende `activity_streams` tabel voor latere GPS/HR/pace/power streams en automatische intervaldetectie.
 
 ## Lokaal draaien
 
@@ -151,8 +154,9 @@ GitHub is alleen voor code. Vercel host de app. Supabase bewaart je trainingsdat
 
 ## Volgende Stap
 
-De logische volgende stap is automatische sync:
+De logische volgende stap is datakwaliteit en analyse:
 
-1. Na login automatisch cloud-workouts laden.
-2. Handmatige en CSV-workouts direct naar Supabase schrijven.
-3. Daarna Strava OAuth en activity-import toevoegen.
+1. Controleren of Strava-imports datum, duur, afstand, HR en laps correct vullen.
+2. Strava streams toevoegen voor GPS/HR/pace/power-tijdreeksen.
+3. Automatische intervalherkenning bouwen bovenop streams.
+4. Training load, HR-zones en HYROX-stationprogressie slimmer maken.

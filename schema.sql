@@ -8,9 +8,18 @@ create extension if not exists pgcrypto;
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
+  hyrox_division text not null default '',
+  age_group text not null default '',
+  unit_system text not null default 'metric' check (unit_system in ('metric', 'imperial')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table profiles
+  add column if not exists hyrox_division text not null default '',
+  add column if not exists age_group text not null default '',
+  add column if not exists unit_system text not null default 'metric'
+    check (unit_system in ('metric', 'imperial'));
 
 create table if not exists data_sources (
   id uuid primary key default gen_random_uuid(),
@@ -139,6 +148,20 @@ create table if not exists detected_intervals (
 alter table detected_intervals
   add column if not exists max_hr integer not null default 0;
 
+create table if not exists activity_streams (
+  id uuid primary key default gen_random_uuid(),
+  workout_id text not null references workouts(id) on delete cascade,
+  stream_type text not null check (
+    stream_type in ('time', 'distance', 'latlng', 'heartrate', 'velocity_smooth', 'watts', 'cadence', 'altitude')
+  ),
+  source text not null default 'strava' check (source in ('strava', 'garmin', 'manual')),
+  resolution text not null default 'raw' check (resolution in ('raw', 'downsampled', 'summary')),
+  data jsonb not null default '[]'::jsonb,
+  sample_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (workout_id, stream_type, source, resolution)
+);
+
 create table if not exists personal_records (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -180,6 +203,7 @@ create index if not exists workout_laps_workout_idx on workout_laps (workout_id,
 create index if not exists workout_segments_workout_idx on workout_segments (workout_id, segment_index);
 create index if not exists workout_segments_type_idx on workout_segments (segment_type, workout_id);
 create index if not exists detected_intervals_workout_idx on detected_intervals (workout_id, interval_index);
+create index if not exists activity_streams_workout_idx on activity_streams (workout_id, stream_type);
 create index if not exists personal_records_user_metric_idx on personal_records (user_id, segment_type, metric_name);
 create index if not exists training_goals_user_status_idx on training_goals (user_id, status, due_date);
 
@@ -222,6 +246,7 @@ alter table workouts enable row level security;
 alter table workout_laps enable row level security;
 alter table workout_segments enable row level security;
 alter table detected_intervals enable row level security;
+alter table activity_streams enable row level security;
 alter table personal_records enable row level security;
 alter table training_goals enable row level security;
 
@@ -307,6 +332,24 @@ create policy "workout_segments_own_all"
     )
   );
 
+drop policy if exists "activity_streams_own_all" on activity_streams;
+create policy "activity_streams_own_all"
+  on activity_streams for all
+  using (
+    exists (
+      select 1 from workouts
+      where workouts.id = activity_streams.workout_id
+        and workouts.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from workouts
+      where workouts.id = activity_streams.workout_id
+        and workouts.user_id = auth.uid()
+    )
+  );
+
 drop policy if exists "personal_records_own_all" on personal_records;
 create policy "personal_records_own_all"
   on personal_records for all
@@ -366,6 +409,9 @@ create index if not exists strava_webhook_events_user_created_idx
 
 create index if not exists strava_webhook_events_object_idx
   on strava_webhook_events (owner_id, object_type, object_id, aspect_type);
+
+create unique index if not exists strava_webhook_events_dedupe_idx
+  on strava_webhook_events (owner_id, object_type, object_id, aspect_type, event_time);
 
 create table if not exists strava_import_logs (
   id uuid primary key default gen_random_uuid(),
