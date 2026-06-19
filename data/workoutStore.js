@@ -71,10 +71,57 @@ function mergeWorkouts(incoming, existing) {
     merged.set(workoutKey(workout), workout);
   });
   incoming.forEach((workout) => {
-    merged.set(workoutKey(workout), workout);
+    const key = workoutKey(workout);
+    merged.set(key, mergeWorkoutRecord(merged.get(key), workout));
   });
 
   return sortWorkoutsByDate([...merged.values()]);
+}
+
+function mergeWorkoutRecord(existing, incoming) {
+  if (!existing) return incoming;
+
+  return {
+    ...existing,
+    ...incoming,
+    title: bestWorkoutTitle(existing, incoming),
+    workoutType: bestWorkoutType(existing, incoming),
+    notes: incoming.notes || existing.notes,
+    rawPayload: {
+      ...(existing.rawPayload || {}),
+      ...(incoming.rawPayload || {}),
+    },
+  };
+}
+
+function bestWorkoutTitle(existing, incoming) {
+  const incomingTitle = String(incoming.title || "");
+  const existingTitle = String(existing.title || "");
+  const incomingLooksGenerated = generatedImportTitle(incomingTitle, incoming);
+  const existingLooksGenerated = generatedImportTitle(existingTitle, existing);
+
+  if (incomingTitle && !incomingLooksGenerated) return incomingTitle;
+  if (existingTitle && !existingLooksGenerated) return existingTitle;
+  return incomingTitle || existingTitle || "Training";
+}
+
+function bestWorkoutType(existing, incoming) {
+  if (incoming.workoutType === "fit_import" && existing.workoutType && existing.workoutType !== "fit_import") {
+    return existing.workoutType;
+  }
+  return incoming.workoutType || existing.workoutType || "general";
+}
+
+function generatedImportTitle(title, workout) {
+  const externalId = workout?.externalId ? String(workout.externalId) : "";
+  return Boolean(
+    !title
+      || title === externalId
+      || title === `Run ${externalId}`
+      || title === `Fietsrit ${externalId}`
+      || title === `Krachttraining ${externalId}`
+      || title === `Fitness ${externalId}`,
+  );
 }
 
 function workoutKey(workout) {
