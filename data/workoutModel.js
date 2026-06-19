@@ -284,18 +284,31 @@ export function normalizeCsvWorkout(record = {}) {
 }
 
 function isStravaExportRecord(record = {}) {
-  return Boolean(record["Activity ID"] || record.activity_id || record.activityId);
+  return Boolean(
+    record["Activity ID"]
+      || record["Activiteits-ID"]
+      || record.activity_id
+      || record.activityId
+      || record.Bestandsnaam
+      || record.Filename,
+  );
 }
 
 function normalizeStravaExportWorkout(record = {}) {
-  const externalId = String(record["Activity ID"] || record.activity_id || record.activityId || "").trim();
-  const distanceMeters = numberOrZero(record.Distance);
-  const movingSeconds = numberOrZero(record["Moving Time"] || record.MovingTime || record.moving_time);
-  const elapsedSeconds = numberOrZero(record["Elapsed Time"] || record.ElapsedTime || record.elapsed_time);
+  const stravaActivityId = String(record["Activity ID"] || record["Activiteits-ID"] || record.activity_id || record.activityId || "").trim();
+  const fileName = record.Filename || record.Bestandsnaam || "";
+  const fileActivityId = String(fileName).match(/(\d{6,})/)?.[1] || "";
+  const externalId = fileActivityId || stravaActivityId;
+  const distanceMeters = parseDistanceMeters(record.Distance || record.Afstand || record.distance);
+  const movingSeconds = localizedNumber(record["Moving Time"] || record.MovingTime || record.Beweegtijd || record.moving_time);
+  const elapsedSeconds = localizedNumber(record["Elapsed Time"] || record.ElapsedTime || record["Verstreken tijd"] || record.elapsed_time);
   const durationSeconds = movingSeconds || elapsedSeconds;
-  const date = parseStravaDate(record["Activity Date"] || record.activity_date || record.date);
-  const startTime = parseStravaStartTime(record["Activity Date"] || record.activity_date || "");
-  const sport = mapStravaSport(record["Activity Type"] || record.activity_type || record.sport);
+  const dateValue = record["Activity Date"] || record["Datum van activiteit"] || record.activity_date || record.date;
+  const date = parseStravaDate(dateValue);
+  const startTime = parseStravaStartTime(dateValue);
+  const sport = mapStravaSport(record["Activity Type"] || record.Activiteitstype || record.activity_type || record.sport);
+  const title = record["Activity Name"] || record["Naam activiteit"] || record.activity_name || record.title || "Strava activiteit";
+  const workoutType = mapStravaWorkoutType(record.Type || record["Activity Type"] || record.Activiteitstype || record.workout_type);
 
   return normalizeWorkout({
     id: externalId ? `strava-${externalId}` : record.id,
@@ -304,17 +317,35 @@ function normalizeStravaExportWorkout(record = {}) {
     date,
     startTime,
     sport,
-    title: record["Activity Name"] || record.activity_name || record.title || "Strava activiteit",
-    workoutType: "strava_export",
+    title,
+    workoutType,
     durationMin: durationSeconds ? Math.round(durationSeconds / 60) : 0,
     distanceKm: distanceMeters ? distanceMeters / 1000 : numberOrZero(record.distance_km),
-    avgHr: record["Average Heart Rate"] || record.average_heartrate || record.avg_hr,
-    maxHr: record["Max Heart Rate"] || record.max_heartrate || record.max_hr,
-    load: record["Relative Effort"] || record.relative_effort || record.load,
+    avgHr: record["Average Heart Rate"] || record["Gemiddelde hartslag"] || record.average_heartrate || record.avg_hr,
+    maxHr: record["Max Heart Rate"] || record["Max. hartslag"] || record.max_heartrate || record.max_hr,
+    load: record["Relative Effort"] || record["Ervaren inspanning"] || record.relative_effort || record.load,
     avgPace: paceFromSecondsAndMeters(durationSeconds, distanceMeters),
-    elevationGain: record["Elevation Gain"] || record.elevation_gain,
-    notes: record["Activity Description"] || record.description || "",
+    elevationGain: record["Elevation Gain"] || record["Totale stijging"] || record.elevation_gain,
+    notes: record["Activity Description"] || record["Beschrijving van activiteit"] || record.description || "",
+    rawPayload: {
+      importType: "strava_csv",
+      stravaActivityId,
+      fileName,
+    },
   });
+}
+
+function localizedNumber(value) {
+  if (typeof value === "number") return value;
+  const raw = String(value || "").trim();
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  return numberOrZero(normalized);
+}
+
+function parseDistanceMeters(value) {
+  const parsed = localizedNumber(value);
+  if (!parsed) return 0;
+  return parsed > 100 ? parsed : parsed * 1000;
 }
 
 function parseStravaDate(value) {
@@ -333,9 +364,18 @@ function parseStravaStartTime(value) {
 
 function mapStravaSport(type) {
   const normalized = String(type || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (["ride", "virtualride", "virtual_ride", "gravelride", "mountainbikeride", "ebikeride"].includes(normalized)) return "cycling";
-  if (["weighttraining", "weight_training", "workout", "crossfit"].includes(normalized)) return "strength";
+  if (["ride", "rit", "virtualride", "virtual_ride", "gravelride", "mountainbikeride", "ebikeride"].includes(normalized)) return "cycling";
+  if (["weighttraining", "weight_training", "workout", "training", "hardloopsessie", "crossfit"].includes(normalized)) return "strength";
   return "running";
+}
+
+function mapStravaWorkoutType(type) {
+  const normalized = String(type || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["ride", "rit"].includes(normalized)) return "ride";
+  if (["run", "hardlopen"].includes(normalized)) return "run";
+  if (["weighttraining", "weight_training"].includes(normalized)) return "weighttraining";
+  if (["workout", "training", "hardloopsessie"].includes(normalized)) return "workout";
+  return normalized || "strava_export";
 }
 
 function paceFromSecondsAndMeters(seconds, meters) {
