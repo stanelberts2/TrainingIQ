@@ -1365,29 +1365,46 @@ function paceFromSecondsAndMeters(seconds, meters) {
   return `${minutes}:${remainder}/km`;
 }
 
-function importDataFile(file) {
-  if (!file) return;
+async function importDataFiles(files) {
+  const fileList = Array.from(files || []);
+  if (!fileList.length) return;
 
-  const reader = new FileReader();
-  reader.addEventListener("load", async () => {
+  let importedCount = 0;
+  const kinds = new Set();
+
+  for (const file of fileList) {
     try {
-      const importedResult = await importFileContents(file, reader.result || "");
+      els.importStatus.innerHTML = `<div class="summary-card"><strong>Import bezig...</strong><span>${file.name} wordt gelezen.</span></div>`;
+      const contents = await readImportFile(file);
+      const importedResult = await importFileContents(file, contents);
       state.workouts = importedResult.workouts;
+      importedCount += importedResult.imported.length;
+      kinds.add(importedResult.kind);
       state.selectedWorkoutId = importedResult.imported[0]?.id || state.selectedWorkoutId;
       state.selectedDate = importedResult.imported[0]?.date || state.selectedDate;
       state.calendarMonth = state.selectedDate ? dateFromKey(state.selectedDate) : state.calendarMonth;
-      render();
-      els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedResult.imported.length} workout(s) verwerkt</strong><span>${importedResult.kind} is lokaal dedupe-opgeslagen. Cloud upload wordt geprobeerd als je bent ingelogd.</span></div>`;
-      await uploadImportedWorkouts(importedResult.imported.length);
     } catch (error) {
-      els.importStatus.innerHTML = `<div class="summary-card"><strong>Import mislukt</strong><span>${error.message}</span></div>`;
+      els.importStatus.innerHTML = `<div class="summary-card"><strong>Import deels mislukt</strong><span>${file.name}: ${error.message}</span></div>`;
+      return;
+    }
+  }
+
+  render();
+  els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedCount} workout(s) verwerkt</strong><span>${[...kinds].join(", ")} lokaal dedupe-opgeslagen. Cloud upload wordt geprobeerd als je bent ingelogd.</span></div>`;
+  await uploadImportedWorkouts(importedCount);
+}
+
+function readImportFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result || ""));
+    reader.addEventListener("error", () => reject(new Error(`${file.name} kon niet gelezen worden.`)));
+    if (isBinaryActivityFile(file)) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
     }
   });
-  if (isBinaryActivityFile(file)) {
-    reader.readAsArrayBuffer(file);
-  } else {
-    reader.readAsText(file);
-  }
 }
 
 function isBinaryActivityFile(file) {
@@ -1553,7 +1570,7 @@ function bindEvents() {
   });
 
   els.csvInput.addEventListener("change", (event) => {
-    importDataFile(event.target.files[0]);
+    importDataFiles(event.target.files);
     event.target.value = "";
   });
 
