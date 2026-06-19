@@ -1155,6 +1155,7 @@ function parseFitWorkout(buffer, fileName = "activity.fit") {
 
   const definitions = new Map();
   const records = [];
+  const sessions = [];
   let offset = headerSize;
   const endOffset = headerSize + dataSize;
 
@@ -1180,22 +1181,30 @@ function parseFitWorkout(buffer, fileName = "activity.fit") {
     const parsed = parseFitDataRecord(view, offset, definition);
     offset = parsed.offset;
     if (definition.globalMessageNumber === 20) records.push(parsed.values);
+    if (definition.globalMessageNumber === 18) sessions.push(parsed.values);
   }
 
   if (!records.length) throw new Error("Geen meetpunten gevonden in dit FIT-bestand.");
 
   const timedRecords = records.filter((record) => record.timestamp);
+  const session = sessions[0] || {};
   const first = timedRecords[0] || records[0];
   const last = timedRecords[timedRecords.length - 1] || records[records.length - 1];
-  const startDate = first.timestamp || new Date();
-  const durationSeconds = first.timestamp && last.timestamp
+  const startDate = session.startTime || first.timestamp || new Date();
+  const recordDurationSeconds = first.timestamp && last.timestamp
     ? Math.max(0, Math.round((last.timestamp - first.timestamp) / 1000))
     : 0;
-  const distanceMeters = Math.max(...records.map((record) => numberOrZero(record.distance)), 0)
+  const durationSeconds = session.totalTimerTime || session.totalElapsedTime || recordDurationSeconds;
+  const distanceMeters = session.totalDistance
+    || Math.max(...records.map((record) => numberOrZero(record.distance)), 0)
     || Math.round(totalTrackDistance(records.filter((record) => record.lat && record.lon)));
   const elevations = records.map((record) => record.altitude).filter((altitude) => altitude > 0);
   const heartRates = records.map((record) => record.heartRate).filter((hr) => hr > 0);
   const externalId = fitExternalId(fileName, startDate);
+  const sport = mapFitSport(session.sport, session.subSport);
+  const workoutType = mapFitWorkoutType(session.sport, session.subSport);
+  const title = fitTitle(fileName, sport, workoutType);
+  const elevationGain = session.totalAscent || elevationGainMeters(elevations);
 
   return {
     id: `strava-${externalId}`,
@@ -1203,20 +1212,23 @@ function parseFitWorkout(buffer, fileName = "activity.fit") {
     externalId,
     date: startDate.toISOString().slice(0, 10),
     startTime: startDate.toTimeString().slice(0, 5),
-    sport: "running",
-    title: fileName.replace(/\.fit(\.gz)?$/i, ""),
-    workoutType: "fit_import",
+    sport,
+    title,
+    workoutType,
     durationMin: durationSeconds ? Math.round(durationSeconds / 60) : 0,
     distanceKm: distanceMeters / 1000,
-    avgHr: heartRates.length ? Math.round(average(heartRates)) : 0,
-    maxHr: heartRates.length ? Math.max(...heartRates) : 0,
+    avgHr: session.avgHr || (heartRates.length ? Math.round(average(heartRates)) : 0),
+    maxHr: session.maxHr || (heartRates.length ? Math.max(...heartRates) : 0),
     avgPace: paceFromSecondsAndMeters(durationSeconds, distanceMeters),
-    elevationGain: elevationGainMeters(elevations),
+    elevationGain,
     notes: `Geimporteerd uit FIT (${records.length} meetpunten).`,
     rawPayload: {
       importType: "fit",
       fileName,
       recordCount: records.length,
+      sessionCount: sessions.length,
+      fitSport: session.sport || 0,
+      fitSubSport: session.subSport || 0,
       hasHeartRate: Boolean(heartRates.length),
     },
   };
@@ -1264,6 +1276,9 @@ function parseFitDataRecord(view, offset, definition) {
     if (definition.globalMessageNumber === 20) {
       applyFitRecordField(values, field.fieldNumber, value);
     }
+    if (definition.globalMessageNumber === 18) {
+      applyFitSessionField(values, field.fieldNumber, value);
+    }
     offset += field.size;
   }
 
@@ -1296,6 +1311,45 @@ function applyFitRecordField(values, fieldNumber, value) {
   if (fieldNumber === 6) values.speed = value / 1000;
   if (fieldNumber === 73) values.speed = value / 1000;
   if (fieldNumber === 78) values.altitude = value / 5 - 500;
+}
+
+function applyFitSessionField(values, fieldNumber, value) {
+  if (fieldNumber === 253) values.timestamp = fitTimestampToDate(value);
+  if (fieldNumber === 2) values.startTime = fitTimestampToDate(value);
+  if (fieldNumber === 5) values.sport = value;
+  if (fieldNumber === 6) values.subSport = value;
+  if (fieldNumber === 7) values.totalElapsedTime = value / 1000;
+  if (fieldNumber === 8) values.totalTimerTime = value / 1000;
+  if (fieldNumber === 9) values.totalDistance = value / 100;
+  if (fieldNumber === 16) values.avgHr = value;
+  if (fieldNumber === 17) values.maxHr = value;
+  if (fieldNumber === 21) values.totalAscent = value;
+}
+
+function mapFitSport(sport, subSport) {
+  if (sport === 1) return "running";
+  if (sport === 2) return "cycling";
+  if (sport === 4) return "strength";
+  if (sport === 37 || subSport === 62) return "strength";
+  return "running";
+}
+
+function mapFitWorkoutType(sport, subSport) {
+  if (sport === 4 || sport === 37) return "strength";
+  if (subSport === 62) return "fitness";
+  if (sport === 1) return "run";
+  if (sport === 2) return "ride";
+  return "fit_import";
+}
+
+function fitTitle(fileName, sport, workoutType) {
+  const idFromName = fileName.match(/(\d{6,})/)?.[1];
+  const baseName = fileName.replace(/\.fit(\.gz)?$/i, "");
+  if (!idFromName) return baseName;
+  if (workoutType === "strength") return `Krachttraining ${idFromName}`;
+  if (workoutType === "fitness") return `Fitness ${idFromName}`;
+  if (sport === "cycling") return `Fietsrit ${idFromName}`;
+  return `Run ${idFromName}`;
 }
 
 function fitTimestampToDate(timestamp) {
