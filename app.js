@@ -1016,27 +1016,60 @@ function addWorkout(formData) {
 }
 
 function parseCsv(text) {
-  const [headerLine, ...rows] = text.trim().split(/\r?\n/);
-  if (!headerLine) return [];
+  const rows = parseCsvRows(text);
+  const [headers = [], ...records] = rows;
+  if (!headers.length) return [];
 
-  const headers = headerLine.split(",").map((header) => header.trim());
+  return records
+    .filter((row) => row.some(Boolean))
+    .map((row) => headers.reduce((record, header, index) => {
+      record[header] = row[index] || "";
+      return record;
+    }, {}));
+}
 
-  return rows
-    .filter(Boolean)
-    .map((row) => {
-      const values = row.split(",").map((value) => value.trim());
-      return headers.reduce((record, header, index) => {
-        record[header] = values[index] || "";
-        return record;
-      }, {});
-    });
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let value = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === "\"" && quoted && nextChar === "\"") {
+      value += "\"";
+      index += 1;
+    } else if (char === "\"") {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(value.trim());
+      value = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && nextChar === "\n") index += 1;
+      row.push(value.trim());
+      rows.push(row);
+      row = [];
+      value = "";
+    } else {
+      value += char;
+    }
+  }
+
+  if (value || row.length) {
+    row.push(value.trim());
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 function importCsv(file) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.addEventListener("load", () => {
+  reader.addEventListener("load", async () => {
     const records = parseCsv(String(reader.result || ""));
     const { imported, workouts } = importCsvWorkouts(records, state.workouts);
     state.workouts = workouts;
@@ -1044,9 +1077,27 @@ function importCsv(file) {
     state.selectedDate = imported[0]?.date || state.selectedDate;
     state.calendarMonth = state.selectedDate ? dateFromKey(state.selectedDate) : state.calendarMonth;
     render();
-    els.importStatus.innerHTML = `<div class="summary-card"><strong>${imported.length} workout(s) geimporteerd</strong><span>CSV is lokaal opgeslagen in deze browser.</span></div>`;
+    els.importStatus.innerHTML = `<div class="summary-card"><strong>${imported.length} workout(s) verwerkt</strong><span>CSV is lokaal dedupe-opgeslagen. Cloud upload wordt geprobeerd als je bent ingelogd.</span></div>`;
+    await uploadImportedCsvWorkouts(imported.length);
   });
   reader.readAsText(file);
+}
+
+async function uploadImportedCsvWorkouts(importedCount) {
+  if (!importedCount || !hasSupabaseConfig()) return;
+
+  try {
+    const user = await ensureSupabaseUser();
+    if (!user) return;
+
+    const { saveSupabaseWorkouts } = await loadSupabaseModule();
+    const { error } = await saveSupabaseWorkouts(state.workouts);
+    if (error) throw error;
+
+    els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedCount} workout(s) verwerkt</strong><span>Opgeslagen in Supabase. Bestaande Strava ID's zijn bijgewerkt, niet dubbel toegevoegd.</span></div>`;
+  } catch (error) {
+    els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedCount} workout(s) lokaal verwerkt</strong><span>Cloud upload lukte niet: ${error.message}</span></div>`;
+  }
 }
 
 function setView(viewId) {

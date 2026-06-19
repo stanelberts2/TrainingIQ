@@ -250,6 +250,10 @@ export function normalizeManualWorkout(formData) {
 }
 
 export function normalizeCsvWorkout(record = {}) {
+  if (isStravaExportRecord(record)) {
+    return normalizeStravaExportWorkout(record);
+  }
+
   return normalizeWorkout({
     id: record.id,
     source: record.source || "google_sheets",
@@ -276,6 +280,72 @@ export function normalizeCsvWorkout(record = {}) {
     qualityDurationSeconds: record.qualityDurationSeconds || record.quality_duration_seconds,
     notes: record.notes,
   });
+}
+
+function isStravaExportRecord(record = {}) {
+  return Boolean(record["Activity ID"] || record.activity_id || record.activityId);
+}
+
+function normalizeStravaExportWorkout(record = {}) {
+  const externalId = String(record["Activity ID"] || record.activity_id || record.activityId || "").trim();
+  const distanceMeters = numberOrZero(record.Distance);
+  const movingSeconds = numberOrZero(record["Moving Time"] || record.MovingTime || record.moving_time);
+  const elapsedSeconds = numberOrZero(record["Elapsed Time"] || record.ElapsedTime || record.elapsed_time);
+  const durationSeconds = movingSeconds || elapsedSeconds;
+  const date = parseStravaDate(record["Activity Date"] || record.activity_date || record.date);
+  const startTime = parseStravaStartTime(record["Activity Date"] || record.activity_date || "");
+  const sport = mapStravaSport(record["Activity Type"] || record.activity_type || record.sport);
+
+  return normalizeWorkout({
+    id: externalId ? `strava-${externalId}` : record.id,
+    source: "strava",
+    externalId,
+    date,
+    startTime,
+    sport,
+    title: record["Activity Name"] || record.activity_name || record.title || "Strava activiteit",
+    workoutType: "strava_export",
+    durationMin: durationSeconds ? Math.round(durationSeconds / 60) : 0,
+    distanceKm: distanceMeters ? distanceMeters / 1000 : numberOrZero(record.distance_km),
+    avgHr: record["Average Heart Rate"] || record.average_heartrate || record.avg_hr,
+    maxHr: record["Max Heart Rate"] || record.max_heartrate || record.max_hr,
+    load: record["Relative Effort"] || record.relative_effort || record.load,
+    avgPace: paceFromSecondsAndMeters(durationSeconds, distanceMeters),
+    elevationGain: record["Elevation Gain"] || record.elevation_gain,
+    notes: record["Activity Description"] || record.description || "",
+  });
+}
+
+function parseStravaDate(value) {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function parseStravaStartTime(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toTimeString().slice(0, 5);
+}
+
+function mapStravaSport(type) {
+  const normalized = String(type || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["ride", "virtualride", "virtual_ride", "gravelride", "mountainbikeride", "ebikeride"].includes(normalized)) return "cycling";
+  if (["weighttraining", "weight_training", "workout", "crossfit"].includes(normalized)) return "strength";
+  return "running";
+}
+
+function paceFromSecondsAndMeters(seconds, meters) {
+  const duration = numberOrZero(seconds);
+  const distance = numberOrZero(meters);
+  if (!duration || !distance) return "";
+
+  const secondsPerKm = duration / (distance / 1000);
+  const minutes = Math.floor(secondsPerKm / 60);
+  const remainder = Math.round(secondsPerKm % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}/km`;
 }
 
 export function numberOrZero(value) {

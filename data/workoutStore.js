@@ -39,7 +39,7 @@ export function createManualWorkout(formData, currentWorkouts = loadWorkouts()) 
 
 export function importCsvWorkouts(records, currentWorkouts = loadWorkouts()) {
   const imported = records.map((record) => normalizeCsvWorkout(record));
-  const workouts = [...imported, ...currentWorkouts];
+  const workouts = mergeWorkouts(imported, currentWorkouts);
   saveWorkouts(workouts);
   return { imported, workouts };
 }
@@ -56,4 +56,21 @@ export function upsertWorkout(rawWorkout, currentWorkouts = loadWorkouts()) {
 
 export function sortWorkoutsByDate(workouts) {
   return [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function mergeWorkouts(incoming, existing) {
+  const merged = new Map();
+  existing.forEach((workout) => {
+    merged.set(workoutKey(workout), workout);
+  });
+  incoming.forEach((workout) => {
+    merged.set(workoutKey(workout), workout);
+  });
+
+  return sortWorkoutsByDate([...merged.values()]);
+}
+
+function workoutKey(workout) {
+  if (workout.source && workout.externalId) return `${workout.source}:${workout.externalId}`;
+  return workout.id;
 }
