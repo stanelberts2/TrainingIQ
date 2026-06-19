@@ -807,16 +807,15 @@ async function handleStravaSyncNow(mode = "recent") {
     const isHistory = mode === "history";
     updateStravaStatus(
       isHistory ? "Strava historie-sync draait..." : "Strava sync draait...",
-      isHistory ? "Ik haal tot 500 oudere activiteiten op. Dit kan even duren." : "Ik haal je recente activiteiten en laps op.",
+      isHistory ? "Ik haal je historie in batches van 100 activiteiten op." : "Ik haal je recente activiteiten en laps op.",
       "idle",
     );
     const { syncStravaNow, loadSupabaseWorkouts } = await loadSupabaseModule();
-    const { result, error } = await syncStravaNow(
-      isHistory
-        ? { mode: "history", maxPages: 5, maxActivities: 500 }
-        : { mode: "recent", limit: 10 },
-    );
-    if (error) throw error;
+    const syncOutcome = isHistory
+      ? await syncStravaHistoryInBatches(syncStravaNow)
+      : await syncStravaRecent(syncStravaNow);
+    if (syncOutcome.error) throw syncOutcome.error;
+    const result = syncOutcome.result;
 
     const { workouts, error: loadError } = await loadSupabaseWorkouts();
     if (loadError) throw loadError;
@@ -833,6 +832,42 @@ async function handleStravaSyncNow(mode = "recent") {
   } catch (error) {
     updateStravaStatus(error.message, "Controleer je Strava permissies en probeer opnieuw.", "error");
   }
+}
+
+async function syncStravaRecent(syncStravaNow) {
+  return syncStravaNow({ mode: "recent", limit: 10 });
+}
+
+async function syncStravaHistoryInBatches(syncStravaNow) {
+  const totals = {
+    imported: 0,
+    laps: 0,
+    checked: 0,
+    mode: "history",
+  };
+
+  for (let page = 1; page <= 5; page += 1) {
+    updateStravaStatus(
+      "Strava historie-sync draait...",
+      `Batch ${page}/5: activiteiten ${(page - 1) * 100 + 1}-${page * 100} ophalen en opslaan.`,
+      "idle",
+    );
+    const { result, error } = await syncStravaNow({
+      mode: "history",
+      startPage: page,
+      maxPages: 1,
+      maxActivities: 100,
+    });
+    if (error) return { result: totals, error: new Error(`Batch ${page}/5 mislukt: ${error.message}`) };
+
+    totals.imported += result?.imported || 0;
+    totals.laps += result?.laps || 0;
+    totals.checked += result?.checked || 0;
+
+    if ((result?.checked || 0) < 100) break;
+  }
+
+  return { result: totals, error: null };
 }
 
 async function handleIntervalExerciseChange(event) {

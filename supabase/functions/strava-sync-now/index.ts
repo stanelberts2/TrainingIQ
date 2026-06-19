@@ -16,6 +16,7 @@ Deno.serve(async (req) => {
     const user = await requireUser(req);
     const body = await req.json().catch(() => ({}));
     const mode = String(body.mode || "recent");
+    const startPage = Math.max(Number(body.startPage) || 1, 1);
     const pageSize = mode === "history" ? 100 : Math.min(Math.max(Number(body.limit) || 10, 1), 30);
     const maxPages = mode === "history" ? Math.min(Math.max(Number(body.maxPages) || 5, 1), 10) : 1;
     const maxActivities = mode === "history" ? Math.min(Math.max(Number(body.maxActivities) || 500, 1), 1000) : pageSize;
@@ -37,7 +38,8 @@ Deno.serve(async (req) => {
 
     const accessToken = await getValidStravaToken(supabase, dataSource);
     const summaries = [];
-    for (let page = 1; page <= maxPages && summaries.length < maxActivities; page += 1) {
+    const endPage = startPage + maxPages - 1;
+    for (let page = startPage; page <= endPage && summaries.length < maxActivities; page += 1) {
       const pageActivities = await fetchStravaActivities(accessToken, pageSize, page);
       summaries.push(...pageActivities);
       if (pageActivities.length < pageSize) break;
@@ -110,6 +112,8 @@ Deno.serve(async (req) => {
       laps: lapCount,
       checked: activitiesToImport.length,
       mode,
+      startPage,
+      endPage,
     }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Strava sync mislukt.";

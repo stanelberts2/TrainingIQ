@@ -81,7 +81,27 @@ export async function syncStravaNow(options = 10) {
     body,
   });
 
-  return { result: data || null, error };
+  return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
+}
+
+async function normalizeFunctionError(error) {
+  const context = error?.context;
+  if (!context || typeof context.clone !== "function") return error;
+
+  try {
+    const body = await context.clone().json();
+    const message = body?.error || body?.message;
+    if (message) return new Error(message);
+  } catch {
+    try {
+      const text = await context.clone().text();
+      if (text) return new Error(text);
+    } catch {
+      // Fall through to the original Supabase error.
+    }
+  }
+
+  return error;
 }
 
 export async function loadSupabaseWorkouts() {
