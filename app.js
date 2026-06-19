@@ -2,6 +2,7 @@ import { numberOrZero, sportLabels } from "./data/workoutModel.js";
 import {
   createManualWorkout,
   importCsvWorkouts,
+  importWorkouts,
   loadWorkouts as loadStoredWorkouts,
   resetWorkouts,
   saveWorkouts,
@@ -1065,25 +1066,147 @@ function parseCsvRows(text) {
   return rows;
 }
 
-function importCsv(file) {
+function parseGpxWorkout(text, fileName = "activity.gpx") {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  const parserError = doc.querySelector("parsererror");
+  if (parserError) throw new Error("Dit GPX-bestand kon niet gelezen worden.");
+
+  const points = [...doc.querySelectorAll("trkpt")].map((point) => {
+    const timeText = point.querySelector("time")?.textContent || "";
+    return {
+      lat: numberOrZero(point.getAttribute("lat")),
+      lon: numberOrZero(point.getAttribute("lon")),
+      ele: numberOrZero(point.querySelector("ele")?.textContent),
+      time: timeText ? new Date(timeText) : null,
+      hr: extractGpxNumber(point, "hr"),
+      cadence: extractGpxNumber(point, "cad"),
+    };
+  }).filter((point) => point.lat && point.lon);
+
+  if (!points.length) throw new Error("Geen trackpunten gevonden in dit GPX-bestand.");
+
+  const firstTimedPoint = points.find((point) => point.time && !Number.isNaN(point.time.getTime()));
+  const lastTimedPoint = [...points].reverse().find((point) => point.time && !Number.isNaN(point.time.getTime()));
+  const startDate = firstTimedPoint?.time || new Date();
+  const durationSeconds = firstTimedPoint && lastTimedPoint
+    ? Math.max(0, Math.round((lastTimedPoint.time - firstTimedPoint.time) / 1000))
+    : 0;
+  const distanceMeters = Math.round(totalTrackDistance(points));
+  const elevations = points.map((point) => point.ele).filter((ele) => ele > 0);
+  const elevationGain = elevationGainMeters(elevations);
+  const heartRates = points.map((point) => point.hr).filter((hr) => hr > 0);
+  const externalId = gpxExternalId(fileName, startDate);
+
+  return {
+    id: `strava-${externalId}`,
+    source: "strava",
+    externalId,
+    date: startDate.toISOString().slice(0, 10),
+    startTime: startDate.toTimeString().slice(0, 5),
+    sport: "running",
+    title: doc.querySelector("trk name")?.textContent || fileName.replace(/\.gpx$/i, ""),
+    workoutType: "gpx_import",
+    durationMin: durationSeconds ? Math.round(durationSeconds / 60) : 0,
+    distanceKm: distanceMeters / 1000,
+    avgHr: heartRates.length ? Math.round(average(heartRates)) : 0,
+    maxHr: heartRates.length ? Math.max(...heartRates) : 0,
+    avgPace: paceFromSecondsAndMeters(durationSeconds, distanceMeters),
+    elevationGain,
+    notes: `Geimporteerd uit GPX (${points.length} trackpunten).`,
+    rawPayload: {
+      importType: "gpx",
+      fileName,
+      pointCount: points.length,
+      hasHeartRate: Boolean(heartRates.length),
+    },
+  };
+}
+
+function extractGpxNumber(point, localName) {
+  const candidates = [...point.getElementsByTagName("*")];
+  const match = candidates.find((node) => node.localName?.toLowerCase() === localName);
+  return numberOrZero(match?.textContent);
+}
+
+function gpxExternalId(fileName, startDate) {
+  const idFromName = fileName.match(/(\d{6,})/)?.[1];
+  if (idFromName) return idFromName;
+  const safeName = fileName.replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  return `gpx-${safeName}-${startDate.toISOString()}`;
+}
+
+function totalTrackDistance(points) {
+  return points.reduce((sum, point, index) => {
+    if (!index) return sum;
+    return sum + haversineMeters(points[index - 1], point);
+  }, 0);
+}
+
+function haversineMeters(a, b) {
+  const earthRadius = 6371000;
+  const dLat = degreesToRadians(b.lat - a.lat);
+  const dLon = degreesToRadians(b.lon - a.lon);
+  const lat1 = degreesToRadians(a.lat);
+  const lat2 = degreesToRadians(b.lat);
+  const angle = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * earthRadius * Math.atan2(Math.sqrt(angle), Math.sqrt(1 - angle));
+}
+
+function degreesToRadians(degrees) {
+  return degrees * Math.PI / 180;
+}
+
+function elevationGainMeters(elevations) {
+  return Math.round(elevations.reduce((gain, elevation, index) => {
+    if (!index) return gain;
+    return gain + Math.max(0, elevation - elevations[index - 1]);
+  }, 0));
+}
+
+function paceFromSecondsAndMeters(seconds, meters) {
+  if (!seconds || !meters) return "";
+  const secondsPerKm = seconds / (meters / 1000);
+  const minutes = Math.floor(secondsPerKm / 60);
+  const remainder = Math.round(secondsPerKm % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}/km`;
+}
+
+function importDataFile(file) {
   if (!file) return;
 
   const reader = new FileReader();
   reader.addEventListener("load", async () => {
-    const records = parseCsv(String(reader.result || ""));
-    const { imported, workouts } = importCsvWorkouts(records, state.workouts);
-    state.workouts = workouts;
-    state.selectedWorkoutId = imported[0]?.id || state.selectedWorkoutId;
-    state.selectedDate = imported[0]?.date || state.selectedDate;
-    state.calendarMonth = state.selectedDate ? dateFromKey(state.selectedDate) : state.calendarMonth;
-    render();
-    els.importStatus.innerHTML = `<div class="summary-card"><strong>${imported.length} workout(s) verwerkt</strong><span>CSV is lokaal dedupe-opgeslagen. Cloud upload wordt geprobeerd als je bent ingelogd.</span></div>`;
-    await uploadImportedCsvWorkouts(imported.length);
+    try {
+      const importedResult = importFileContents(file, String(reader.result || ""));
+      state.workouts = importedResult.workouts;
+      state.selectedWorkoutId = importedResult.imported[0]?.id || state.selectedWorkoutId;
+      state.selectedDate = importedResult.imported[0]?.date || state.selectedDate;
+      state.calendarMonth = state.selectedDate ? dateFromKey(state.selectedDate) : state.calendarMonth;
+      render();
+      els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedResult.imported.length} workout(s) verwerkt</strong><span>${importedResult.kind} is lokaal dedupe-opgeslagen. Cloud upload wordt geprobeerd als je bent ingelogd.</span></div>`;
+      await uploadImportedWorkouts(importedResult.imported.length);
+    } catch (error) {
+      els.importStatus.innerHTML = `<div class="summary-card"><strong>Import mislukt</strong><span>${error.message}</span></div>`;
+    }
   });
   reader.readAsText(file);
 }
 
-async function uploadImportedCsvWorkouts(importedCount) {
+function importFileContents(file, contents) {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension === "gpx") {
+    const workout = parseGpxWorkout(contents, file.name);
+    const result = importWorkouts([workout], state.workouts);
+    return { ...result, kind: "GPX" };
+  }
+
+  const records = parseCsv(contents);
+  const result = importCsvWorkouts(records, state.workouts);
+  return { ...result, kind: "CSV" };
+}
+
+async function uploadImportedWorkouts(importedCount) {
   if (!importedCount || !hasSupabaseConfig()) return;
 
   try {
@@ -1094,7 +1217,7 @@ async function uploadImportedCsvWorkouts(importedCount) {
     const { error } = await saveSupabaseWorkouts(state.workouts);
     if (error) throw error;
 
-    els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedCount} workout(s) verwerkt</strong><span>Opgeslagen in Supabase. Bestaande Strava ID's zijn bijgewerkt, niet dubbel toegevoegd.</span></div>`;
+    els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedCount} workout(s) verwerkt</strong><span>Opgeslagen in Supabase. Bestaande externe ID's zijn bijgewerkt, niet dubbel toegevoegd.</span></div>`;
   } catch (error) {
     els.importStatus.innerHTML = `<div class="summary-card"><strong>${importedCount} workout(s) lokaal verwerkt</strong><span>Cloud upload lukte niet: ${error.message}</span></div>`;
   }
@@ -1222,7 +1345,7 @@ function bindEvents() {
   });
 
   els.csvInput.addEventListener("change", (event) => {
-    importCsv(event.target.files[0]);
+    importDataFile(event.target.files[0]);
     event.target.value = "";
   });
 

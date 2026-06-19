@@ -44,6 +44,13 @@ export function importCsvWorkouts(records, currentWorkouts = loadWorkouts()) {
   return { imported, workouts };
 }
 
+export function importWorkouts(rawWorkouts, currentWorkouts = loadWorkouts()) {
+  const imported = rawWorkouts.map((workout) => normalizeWorkout(workout));
+  const workouts = mergeWorkouts(imported, currentWorkouts);
+  saveWorkouts(workouts);
+  return { imported, workouts };
+}
+
 export function upsertWorkout(rawWorkout, currentWorkouts = loadWorkouts()) {
   const workout = normalizeWorkout(rawWorkout);
   const workouts = [

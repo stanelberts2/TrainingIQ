@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#f6f7f8" />
     <title>TrainIQ</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=strava-csv-import-1" />
+    <link rel="stylesheet" href="./styles.css?v=gpx-import-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -379,9 +379,9 @@
               <form class="workout-form" id="csvForm">
                 <label>
                   CSV bestand
-                  <input id="csvInput" type="file" accept=".csv,text/csv" />
+                  <input id="csvInput" type="file" accept=".csv,.gpx,text/csv,application/gpx+xml" />
                 </label>
-                <p class="help-text">Gebruik een TrainIQ CSV of Strava export CSV zoals activities.csv. Strava Activity ID's worden gebruikt om bestaande activiteiten bij te werken in plaats van dubbel toe te voegen.</p>
+                <p class="help-text">Gebruik een TrainIQ CSV, Strava activities.csv of een losse GPX. Strava Activity ID's en GPX-bestandsnamen/starttijden worden gebruikt om bestaande activiteiten bij te werken in plaats van dubbel toe te voegen.</p>
               </form>
               <div id="importStatus" class="import-status"></div>
             </article>
@@ -419,6 +419,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=strava-csv-import-1"></script>
+    <script type="module" src="./app.js?v=gpx-import-1"></script>
   </body>
 </html>
