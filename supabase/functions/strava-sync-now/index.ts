@@ -17,7 +17,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const mode = String(body.mode || "recent");
     const startPage = Math.max(Number(body.startPage) || 1, 1);
-    const pageSize = mode === "history" ? 100 : Math.min(Math.max(Number(body.limit) || 10, 1), 30);
+    const historyPageSize = Math.min(Math.max(Number(body.pageSize) || 15, 1), 50);
+    const pageSize = mode === "history" ? historyPageSize : Math.min(Math.max(Number(body.limit) || 10, 1), 30);
     const maxPages = mode === "history" ? Math.min(Math.max(Number(body.maxPages) || 5, 1), 10) : 1;
     const maxActivities = mode === "history" ? Math.min(Math.max(Number(body.maxActivities) || 500, 1), 1000) : pageSize;
     const supabase = createServiceClient();

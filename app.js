@@ -19,6 +19,8 @@ const state = {
 };
 
 const SUPABASE_CONFIG_KEY = "trainiq-supabase-config";
+const STRAVA_HISTORY_PAGE_KEY = "trainiq-strava-history-page";
+const STRAVA_HISTORY_BATCH_SIZE = 15;
 
 const els = {
   navItems: document.querySelectorAll(".nav-item"),
@@ -807,7 +809,7 @@ async function handleStravaSyncNow(mode = "recent") {
     const isHistory = mode === "history";
     updateStravaStatus(
       isHistory ? "Strava historie-sync draait..." : "Strava sync draait...",
-      isHistory ? "Ik haal je historie in batches van 100 activiteiten op." : "Ik haal je recente activiteiten en laps op.",
+      isHistory ? `Ik haal de volgende ${STRAVA_HISTORY_BATCH_SIZE} oudere activiteiten op.` : "Ik haal je recente activiteiten en laps op.",
       "idle",
     );
     const { syncStravaNow, loadSupabaseWorkouts } = await loadSupabaseModule();
@@ -826,7 +828,9 @@ async function handleStravaSyncNow(mode = "recent") {
     render();
     updateStravaStatus(
       isHistory ? "Strava historie-sync klaar." : "Strava sync klaar.",
-      `${result?.imported || 0} activiteit(en) verwerkt, ${result?.laps || 0} lap(s) opgeslagen.`,
+      isHistory
+        ? `${result?.imported || 0} activiteit(en) verwerkt, ${result?.laps || 0} lap(s) opgeslagen. Klik later opnieuw voor de volgende batch.`
+        : `${result?.imported || 0} activiteit(en) verwerkt, ${result?.laps || 0} lap(s) opgeslagen.`,
       "ready",
     );
   } catch (error) {
@@ -839,6 +843,7 @@ async function syncStravaRecent(syncStravaNow) {
 }
 
 async function syncStravaHistoryInBatches(syncStravaNow) {
+  const page = getStravaHistoryPage();
   const totals = {
     imported: 0,
     laps: 0,
@@ -846,28 +851,34 @@ async function syncStravaHistoryInBatches(syncStravaNow) {
     mode: "history",
   };
 
-  for (let page = 1; page <= 5; page += 1) {
-    updateStravaStatus(
-      "Strava historie-sync draait...",
-      `Batch ${page}/5: activiteiten ${(page - 1) * 100 + 1}-${page * 100} ophalen en opslaan.`,
-      "idle",
-    );
-    const { result, error } = await syncStravaNow({
-      mode: "history",
-      startPage: page,
-      maxPages: 1,
-      maxActivities: 100,
-    });
-    if (error) return { result: totals, error: new Error(`Batch ${page}/5 mislukt: ${error.message}`) };
+  updateStravaStatus(
+    "Strava historie-sync draait...",
+    `Batch pagina ${page}: ${STRAVA_HISTORY_BATCH_SIZE} activiteiten ophalen en opslaan.`,
+    "idle",
+  );
+  const { result, error } = await syncStravaNow({
+    mode: "history",
+    startPage: page,
+    pageSize: STRAVA_HISTORY_BATCH_SIZE,
+    maxPages: 1,
+    maxActivities: STRAVA_HISTORY_BATCH_SIZE,
+  });
+  if (error) return { result: totals, error };
 
-    totals.imported += result?.imported || 0;
-    totals.laps += result?.laps || 0;
-    totals.checked += result?.checked || 0;
+  totals.imported += result?.imported || 0;
+  totals.laps += result?.laps || 0;
+  totals.checked += result?.checked || 0;
 
-    if ((result?.checked || 0) < 100) break;
+  if ((result?.checked || 0) >= STRAVA_HISTORY_BATCH_SIZE) {
+    localStorage.setItem(STRAVA_HISTORY_PAGE_KEY, String(page + 1));
   }
 
   return { result: totals, error: null };
+}
+
+function getStravaHistoryPage() {
+  const page = Number(localStorage.getItem(STRAVA_HISTORY_PAGE_KEY));
+  return Number.isFinite(page) && page > 0 ? page : 1;
 }
 
 async function handleIntervalExerciseChange(event) {
