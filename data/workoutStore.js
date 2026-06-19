@@ -14,14 +14,17 @@ export function loadWorkouts() {
 
   try {
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? normalizeWorkouts(parsed) : normalizeWorkouts(seedWorkouts);
+    if (!Array.isArray(parsed)) return normalizeWorkouts(seedWorkouts);
+    const cleaned = cleanWorkouts(normalizeWorkouts(parsed));
+    if (cleaned.length !== parsed.length) saveWorkouts(cleaned);
+    return cleaned;
   } catch {
     return normalizeWorkouts(seedWorkouts);
   }
 }
 
 export function saveWorkouts(workouts) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeWorkouts(workouts)));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanWorkouts(normalizeWorkouts(workouts))));
 }
 
 export function resetWorkouts() {
@@ -127,4 +130,20 @@ function generatedImportTitle(title, workout) {
 function workoutKey(workout) {
   if (workout.source && workout.externalId) return `${workout.source}:${workout.externalId}`;
   return workout.id;
+}
+
+function cleanWorkouts(workouts) {
+  return mergeWorkouts([], workouts.filter((workout) => !isBrokenPlaceholderWorkout(workout)));
+}
+
+function isBrokenPlaceholderWorkout(workout) {
+  return workout.source === "google_sheets"
+    && !workout.externalId
+    && workout.title === "Training"
+    && workout.workoutType === "general"
+    && !workout.durationMin
+    && !workout.distanceKm
+    && !workout.avgHr
+    && !workout.maxHr
+    && !workout.notes;
 }
