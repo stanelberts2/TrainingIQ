@@ -173,6 +173,7 @@ export function normalizeWorkout(input = {}) {
     qualityVolumeMeters: numberOrZero(input.qualityVolumeMeters ?? input.quality_volume_meters) || intervalProfile.qualityVolumeMeters,
     qualityDurationSeconds: numberOrZero(input.qualityDurationSeconds ?? input.quality_duration_seconds) || intervalProfile.qualityDurationSeconds,
     notes: String(input.notes || input.description || ""),
+    rawPayload: input.rawPayload || input.raw_payload || {},
     createdAt: String(input.createdAt || input.created_at || now),
     updatedAt: String(input.updatedAt || input.updated_at || now),
   };

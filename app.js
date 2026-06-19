@@ -1122,6 +1122,199 @@ function parseGpxWorkout(text, fileName = "activity.gpx") {
   };
 }
 
+async function parseFitWorkoutFromFile(file, buffer) {
+  const fitBuffer = file.name.toLowerCase().endsWith(".gz")
+    ? await decompressGzip(buffer)
+    : buffer;
+  return parseFitWorkout(fitBuffer, file.name);
+}
+
+async function decompressGzip(buffer) {
+  if (!("DecompressionStream" in window)) {
+    throw new Error("Deze browser ondersteunt het uitpakken van .gz nog niet. Pak het bestand eerst uit naar .fit en upload die.");
+  }
+
+  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Response(stream).arrayBuffer();
+}
+
+function parseFitWorkout(buffer, fileName = "activity.fit") {
+  const view = new DataView(buffer);
+  const headerSize = view.getUint8(0);
+  const dataSize = view.getUint32(4, true);
+  const signature = String.fromCharCode(
+    view.getUint8(8),
+    view.getUint8(9),
+    view.getUint8(10),
+    view.getUint8(11),
+  );
+
+  if (headerSize < 12 || signature !== ".FIT") {
+    throw new Error("Dit FIT-bestand kon niet gelezen worden.");
+  }
+
+  const definitions = new Map();
+  const records = [];
+  let offset = headerSize;
+  const endOffset = headerSize + dataSize;
+
+  while (offset < endOffset) {
+    const header = view.getUint8(offset);
+    offset += 1;
+
+    if (header & 0x80) continue;
+
+    const localType = header & 0x0f;
+    const isDefinition = Boolean(header & 0x40);
+    const hasDeveloperFields = Boolean(header & 0x20);
+
+    if (isDefinition) {
+      const parsed = parseFitDefinition(view, offset, hasDeveloperFields);
+      definitions.set(localType, parsed.definition);
+      offset = parsed.offset;
+      continue;
+    }
+
+    const definition = definitions.get(localType);
+    if (!definition) throw new Error("FIT-data bevat records zonder definitie.");
+    const parsed = parseFitDataRecord(view, offset, definition);
+    offset = parsed.offset;
+    if (definition.globalMessageNumber === 20) records.push(parsed.values);
+  }
+
+  if (!records.length) throw new Error("Geen meetpunten gevonden in dit FIT-bestand.");
+
+  const timedRecords = records.filter((record) => record.timestamp);
+  const first = timedRecords[0] || records[0];
+  const last = timedRecords[timedRecords.length - 1] || records[records.length - 1];
+  const startDate = first.timestamp || new Date();
+  const durationSeconds = first.timestamp && last.timestamp
+    ? Math.max(0, Math.round((last.timestamp - first.timestamp) / 1000))
+    : 0;
+  const distanceMeters = Math.max(...records.map((record) => numberOrZero(record.distance)), 0)
+    || Math.round(totalTrackDistance(records.filter((record) => record.lat && record.lon)));
+  const elevations = records.map((record) => record.altitude).filter((altitude) => altitude > 0);
+  const heartRates = records.map((record) => record.heartRate).filter((hr) => hr > 0);
+  const externalId = fitExternalId(fileName, startDate);
+
+  return {
+    id: `strava-${externalId}`,
+    source: "strava",
+    externalId,
+    date: startDate.toISOString().slice(0, 10),
+    startTime: startDate.toTimeString().slice(0, 5),
+    sport: "running",
+    title: fileName.replace(/\.fit(\.gz)?$/i, ""),
+    workoutType: "fit_import",
+    durationMin: durationSeconds ? Math.round(durationSeconds / 60) : 0,
+    distanceKm: distanceMeters / 1000,
+    avgHr: heartRates.length ? Math.round(average(heartRates)) : 0,
+    maxHr: heartRates.length ? Math.max(...heartRates) : 0,
+    avgPace: paceFromSecondsAndMeters(durationSeconds, distanceMeters),
+    elevationGain: elevationGainMeters(elevations),
+    notes: `Geimporteerd uit FIT (${records.length} meetpunten).`,
+    rawPayload: {
+      importType: "fit",
+      fileName,
+      recordCount: records.length,
+      hasHeartRate: Boolean(heartRates.length),
+    },
+  };
+}
+
+function parseFitDefinition(view, offset, hasDeveloperFields) {
+  offset += 1;
+  const littleEndian = view.getUint8(offset) === 0;
+  offset += 1;
+  const globalMessageNumber = view.getUint16(offset, littleEndian);
+  offset += 2;
+  const fieldCount = view.getUint8(offset);
+  offset += 1;
+  const fields = [];
+
+  for (let index = 0; index < fieldCount; index += 1) {
+    fields.push({
+      fieldNumber: view.getUint8(offset),
+      size: view.getUint8(offset + 1),
+      baseType: view.getUint8(offset + 2),
+    });
+    offset += 3;
+  }
+
+  if (hasDeveloperFields) {
+    const developerFieldCount = view.getUint8(offset);
+    offset += 1 + developerFieldCount * 3;
+  }
+
+  return {
+    offset,
+    definition: {
+      littleEndian,
+      globalMessageNumber,
+      fields,
+    },
+  };
+}
+
+function parseFitDataRecord(view, offset, definition) {
+  const values = {};
+
+  for (const field of definition.fields) {
+    const value = readFitField(view, offset, field, definition.littleEndian);
+    if (definition.globalMessageNumber === 20) {
+      applyFitRecordField(values, field.fieldNumber, value);
+    }
+    offset += field.size;
+  }
+
+  return { offset, values };
+}
+
+function readFitField(view, offset, field, littleEndian) {
+  const baseType = field.baseType & 0x1f;
+  if (field.size === 1) return view.getUint8(offset);
+  if (field.size === 2) {
+    if (baseType === 0x01) return view.getInt16(offset, littleEndian);
+    return view.getUint16(offset, littleEndian);
+  }
+  if (field.size === 4) {
+    if (baseType === 0x07) return view.getInt32(offset, littleEndian);
+    if (baseType === 0x08) return view.getUint32(offset, littleEndian);
+    if (baseType === 0x0d) return view.getUint32(offset, littleEndian);
+    return view.getInt32(offset, littleEndian);
+  }
+  return 0;
+}
+
+function applyFitRecordField(values, fieldNumber, value) {
+  if (fieldNumber === 253) values.timestamp = fitTimestampToDate(value);
+  if (fieldNumber === 0) values.lat = semicirclesToDegrees(value);
+  if (fieldNumber === 1) values.lon = semicirclesToDegrees(value);
+  if (fieldNumber === 2) values.altitude = value / 5 - 500;
+  if (fieldNumber === 3) values.heartRate = value;
+  if (fieldNumber === 5) values.distance = value / 100;
+  if (fieldNumber === 6) values.speed = value / 1000;
+  if (fieldNumber === 73) values.speed = value / 1000;
+  if (fieldNumber === 78) values.altitude = value / 5 - 500;
+}
+
+function fitTimestampToDate(timestamp) {
+  if (!timestamp) return null;
+  return new Date((timestamp + 631065600) * 1000);
+}
+
+function semicirclesToDegrees(value) {
+  if (!value) return 0;
+  return value * 180 / 2 ** 31;
+}
+
+function fitExternalId(fileName, startDate) {
+  const idFromName = fileName.match(/(\d{6,})/)?.[1];
+  if (idFromName) return idFromName;
+  const safeName = fileName.replace(/\.fit(\.gz)?$/i, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  return `fit-${safeName}-${startDate.toISOString()}`;
+}
+
 function extractGpxNumber(point, localName) {
   const candidates = [...point.getElementsByTagName("*")];
   const match = candidates.find((node) => node.localName?.toLowerCase() === localName);
@@ -1178,7 +1371,7 @@ function importDataFile(file) {
   const reader = new FileReader();
   reader.addEventListener("load", async () => {
     try {
-      const importedResult = importFileContents(file, String(reader.result || ""));
+      const importedResult = await importFileContents(file, reader.result || "");
       state.workouts = importedResult.workouts;
       state.selectedWorkoutId = importedResult.imported[0]?.id || state.selectedWorkoutId;
       state.selectedDate = importedResult.imported[0]?.date || state.selectedDate;
@@ -1190,18 +1383,33 @@ function importDataFile(file) {
       els.importStatus.innerHTML = `<div class="summary-card"><strong>Import mislukt</strong><span>${error.message}</span></div>`;
     }
   });
-  reader.readAsText(file);
+  if (isBinaryActivityFile(file)) {
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.readAsText(file);
+  }
 }
 
-function importFileContents(file, contents) {
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  if (extension === "gpx") {
-    const workout = parseGpxWorkout(contents, file.name);
+function isBinaryActivityFile(file) {
+  const name = file.name.toLowerCase();
+  return name.endsWith(".fit") || name.endsWith(".fit.gz");
+}
+
+async function importFileContents(file, contents) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".gpx")) {
+    const workout = parseGpxWorkout(String(contents || ""), file.name);
     const result = importWorkouts([workout], state.workouts);
     return { ...result, kind: "GPX" };
   }
 
-  const records = parseCsv(contents);
+  if (name.endsWith(".fit") || name.endsWith(".fit.gz")) {
+    const workout = await parseFitWorkoutFromFile(file, contents);
+    const result = importWorkouts([workout], state.workouts);
+    return { ...result, kind: "FIT" };
+  }
+
+  const records = parseCsv(String(contents || ""));
   const result = importCsvWorkouts(records, state.workouts);
   return { ...result, kind: "CSV" };
 }
