@@ -607,8 +607,34 @@ textarea {
   text-align: left;
 }
 
+.quality-list {
+  display: grid;
+  gap: 10px;
+}
+
+.quality-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  text-align: left;
+}
+
+.quality-item.is-high {
+  border-color: #f3b1bd;
+  background: #fff7f8;
+}
+
+.quality-item strong,
+.quality-item span {
+  display: block;
+}
+
 .workout-item:hover,
-.workout-item.is-selected {
+.workout-item.is-selected,
+.quality-item:hover {
   border-color: var(--blue);
   background: #edf3ff;
 }
@@ -619,12 +645,50 @@ textarea {
 }
 
 .workout-item span,
+.quality-item > div > span,
 .table-row span,
 .interval-table-row span,
 .segment-table-row span,
 .summary-card span,
 .empty-state {
   color: var(--muted);
+}
+
+.issue-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.issue-pill {
+  display: inline-flex;
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 850;
+  color: var(--muted);
+}
+
+.issue-pill.high {
+  border-color: #f3b1bd;
+  background: #fff1f3;
+  color: #c83856;
+}
+
+.issue-pill.medium {
+  border-color: #f3d38f;
+  background: #fff8e8;
+  color: #9b6500;
+}
+
+.issue-pill.low {
+  border-color: #bdd7c8;
+  background: #f0faf4;
+  color: #217a52;
 }
 
 .interval-table,
@@ -743,7 +807,7 @@ textarea {
   }
 
   .nav-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .sync-card {
@@ -762,8 +826,13 @@ textarea {
 
   .interval-row,
   .interval-table-row,
-  .segment-table-row {
+  .segment-table-row,
+  .quality-item {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .issue-list {
+    justify-content: flex-start;
   }
 
   .row-card-header,
@@ -798,7 +867,8 @@ textarea {
   .button-row,
   .row-card-header,
   .strength-row .row-card-header,
-  .row-card-grid {
+  .row-card-grid,
+  .quality-item {
     grid-template-columns: 1fr;
   }
 

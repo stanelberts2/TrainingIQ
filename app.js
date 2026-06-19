@@ -58,6 +58,8 @@ const els = {
   comparisonTable: document.querySelector("#comparisonTable"),
   intervalComparison: document.querySelector("#intervalComparison"),
   segmentAnalysis: document.querySelector("#segmentAnalysis"),
+  qualitySummary: document.querySelector("#qualitySummary"),
+  qualityList: document.querySelector("#qualityList"),
   csvInput: document.querySelector("#csvInput"),
   importStatus: document.querySelector("#importStatus"),
   supabaseConfigForm: document.querySelector("#supabaseConfigForm"),
@@ -563,6 +565,127 @@ function renderSegmentAnalysis(selected, previous) {
   `;
 }
 
+function renderQuality() {
+  const audits = sortedWorkouts().map((workout) => ({
+    workout,
+    issues: auditWorkout(workout),
+  }));
+  const flagged = audits.filter((item) => item.issues.length);
+  const high = flagged.filter((item) => item.issues.some((issue) => issue.severity === "high"));
+  const medium = flagged.filter((item) => item.issues.some((issue) => issue.severity === "medium") && !item.issues.some((issue) => issue.severity === "high"));
+  const missingHr = flagged.filter((item) => item.issues.some((issue) => issue.code === "missing_hr"));
+  const missingDetail = flagged.filter((item) => item.issues.some((issue) => issue.code === "missing_detail"));
+
+  els.qualitySummary.innerHTML = `
+    <div class="summary-card">
+      <strong>${state.workouts.length}</strong>
+      <span>Workouts totaal.</span>
+    </div>
+    <div class="summary-card">
+      <strong>${flagged.length}</strong>
+      <span>Workouts met aandachtspunt.</span>
+    </div>
+    <div class="summary-card">
+      <strong>${high.length}</strong>
+      <span>Hoge prioriteit.</span>
+    </div>
+    <div class="summary-card">
+      <strong>${missingHr.length}</strong>
+      <span>Workouts zonder hartslagdata.</span>
+    </div>
+    <div class="summary-card">
+      <strong>${missingDetail.length}</strong>
+      <span>Zonder FIT/GPX/API-detaildata.</span>
+    </div>
+    <div class="summary-card">
+      <strong>${medium.length}</strong>
+      <span>Middelmatige twijfelgevallen.</span>
+    </div>
+  `;
+
+  if (!flagged.length) {
+    els.qualityList.innerHTML = `<p class="empty-state">Geen dataproblemen gevonden. Dit ziet er opvallend netjes uit.</p>`;
+    return;
+  }
+
+  els.qualityList.innerHTML = flagged
+    .slice(0, 120)
+    .map(({ workout, issues }) => `
+      <button class="quality-item ${issues.some((issue) => issue.severity === "high") ? "is-high" : ""}" type="button" data-workout-id="${workout.id}">
+        <div>
+          <strong>${workout.title}</strong>
+          <span>${formatDate(workout.date)} · ${sportLabels[workout.sport]} · ${workout.workoutType} · ${formatDuration(numberOrZero(workout.durationMin))} · ${workout.distanceKm ? `${Number(workout.distanceKm).toFixed(2)} km` : "geen afstand"}</span>
+        </div>
+        <div class="issue-list">
+          ${issues.map((issue) => `<span class="issue-pill ${issue.severity}">${issue.label}</span>`).join("")}
+        </div>
+      </button>
+    `)
+    .join("");
+}
+
+function auditWorkout(workout) {
+  const issues = [];
+  const rawPayload = workout.rawPayload || {};
+  const title = String(workout.title || "");
+  const lowerTitle = title.toLowerCase();
+  const duration = numberOrZero(workout.durationMin);
+  const distance = numberOrZero(workout.distanceKm);
+  const avgHr = numberOrZero(workout.avgHr);
+  const maxHr = numberOrZero(workout.maxHr);
+  const hasDetailData = Boolean(
+    rawPayload.importType === "fit"
+      || rawPayload.importType === "gpx"
+      || rawPayload.importType === "strava_api"
+      || rawPayload.fileName,
+  );
+
+  if (!title || title === "Training" || /^Run \d+$/.test(title) || /^Fietsrit \d+$/.test(title) || /^Krachttraining \d+$/.test(title)) {
+    issues.push({ code: "generated_title", label: "Titel lijkt gegenereerd", severity: "medium" });
+  }
+
+  if (!duration) {
+    issues.push({ code: "missing_duration", label: "Geen duur", severity: "high" });
+  }
+
+  if (!avgHr && !maxHr) {
+    issues.push({ code: "missing_hr", label: "Geen HR", severity: workout.source === "strava" ? "medium" : "low" });
+  }
+
+  if (workout.sport === "running" && duration >= 10 && distance < 0.5) {
+    issues.push({ code: "low_distance_run", label: "Run met bijna geen afstand", severity: "high" });
+  }
+
+  if (workout.sport === "cycling" && duration >= 20 && distance < 2) {
+    issues.push({ code: "low_distance_ride", label: "Rit met bijna geen afstand", severity: "high" });
+  }
+
+  if (distance > 0 && duration > 0) {
+    const paceSeconds = duration * 60 / distance;
+    if (workout.sport === "running" && (paceSeconds < 120 || paceSeconds > 900)) {
+      issues.push({ code: "odd_pace", label: "Tempo lijkt onrealistisch", severity: "medium" });
+    }
+  }
+
+  if (lowerTitle.includes("erg") && workout.sport === "running") {
+    issues.push({ code: "erg_as_running", label: "ERG staat als hardlopen", severity: "medium" });
+  }
+
+  if ((lowerTitle.includes("run") || lowerTitle.includes("loop")) && workout.sport === "strength" && distance > 1) {
+    issues.push({ code: "run_as_strength", label: "Run lijkt als kracht opgeslagen", severity: "medium" });
+  }
+
+  if (workout.source === "strava" && !hasDetailData) {
+    issues.push({ code: "missing_detail", label: "Alleen CSV/API samenvatting", severity: "low" });
+  }
+
+  if (workout.workoutType === "gpx_import" && !avgHr && !maxHr) {
+    issues.push({ code: "gpx_without_hr", label: "GPX zonder HR", severity: "low" });
+  }
+
+  return issues;
+}
+
 function createIntervalRow(index = 1) {
   const row = document.createElement("div");
   row.className = "interval-row";
@@ -1005,6 +1128,7 @@ function render() {
   renderCalendar();
   renderAnalysisOptions();
   renderAnalysis();
+  renderQuality();
 }
 
 function addWorkout(formData) {
@@ -1606,6 +1730,15 @@ function bindEvents() {
   });
 
   els.workoutList.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-workout-id]");
+    if (!item) return;
+
+    state.selectedWorkoutId = item.dataset.workoutId;
+    setView("analysis");
+    render();
+  });
+
+  els.qualityList.addEventListener("click", (event) => {
     const item = event.target.closest("[data-workout-id]");
     if (!item) return;
 

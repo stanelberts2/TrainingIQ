@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#f6f7f8" />
     <title>TrainIQ</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=clean-placeholder-imports-1" />
+    <link rel="stylesheet" href="./styles.css?v=data-quality-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -27,6 +27,7 @@
           <button class="nav-item is-active" type="button" data-view="dashboard">Dashboard</button>
           <button class="nav-item" type="button" data-view="workouts">Workouts</button>
           <button class="nav-item" type="button" data-view="analysis">Analyse</button>
+          <button class="nav-item" type="button" data-view="quality">Datacheck</button>
           <button class="nav-item" type="button" data-view="data">Data</button>
         </nav>
 
@@ -309,6 +310,28 @@
           </article>
         </section>
 
+        <section class="view" id="quality" aria-label="Datacheck">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Datakwaliteit</p>
+                <h2>Onvolledige of twijfelachtige workouts</h2>
+              </div>
+            </div>
+            <div id="qualitySummary" class="analysis-summary"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Controlelijst</p>
+                <h2>Workouts die aandacht nodig hebben</h2>
+              </div>
+            </div>
+            <div id="qualityList" class="quality-list"></div>
+          </article>
+        </section>
+
         <section class="view" id="data" aria-label="Data">
           <div class="content-grid">
             <article class="panel">
@@ -419,6 +442,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=clean-placeholder-imports-1"></script>
+    <script type="module" src="./app.js?v=data-quality-1"></script>
   </body>
 </html>
