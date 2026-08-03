@@ -112,3 +112,23 @@ export async function fetchStravaActivityLaps(accessToken, activityId) {
 
   return Array.isArray(body) ? body : [];
 }
+
+export async function fetchStravaActivityStreams(accessToken, activityId, keys = ["time", "heartrate"]) {
+  const params = new URLSearchParams({
+    keys: keys.join(","),
+    key_by_type: "true",
+  });
+  const response = await fetch(`${STRAVA_API}/activities/${activityId}/streams?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (response.status === 404) return {};
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || "Strava streams request failed.");
+  }
+
+  return body && typeof body === "object" ? body : {};
+}

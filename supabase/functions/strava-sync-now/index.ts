@@ -4,6 +4,7 @@ import {
   fetchStravaActivities,
   fetchStravaActivity,
   fetchStravaActivityLaps,
+  fetchStravaActivityStreams,
   getValidStravaToken,
 } from "../_shared/strava_client.js";
 import { mapStravaActivityToWorkoutRows } from "../_shared/strava_mapper.js";
@@ -55,7 +56,8 @@ Deno.serve(async (req) => {
 
       const activity = await fetchStravaActivity(accessToken, activityId);
       const laps = await fetchStravaActivityLaps(accessToken, activityId);
-      const rows = mapStravaActivityToWorkoutRows(activity, laps, user.id);
+      const streams = await fetchStravaActivityStreams(accessToken, activityId, ["time", "heartrate"]);
+      const rows = mapStravaActivityToWorkoutRows(activity, laps, user.id, streams);
 
       const { error: workoutError } = await supabase
         .from("workouts")
@@ -70,16 +72,16 @@ Deno.serve(async (req) => {
 
       if (existingLapsError) throw existingLapsError;
 
-      const lapsToInsert = mergeManualLapMetadata(rows.laps, existingLaps || []);
+      if (rows.laps.length) {
+        const lapsToInsert = mergeManualLapMetadata(rows.laps, existingLaps || []);
 
-      const { error: deleteLapsError } = await supabase
-        .from("workout_laps")
-        .delete()
-        .eq("workout_id", rows.workout.id);
+        const { error: deleteLapsError } = await supabase
+          .from("workout_laps")
+          .delete()
+          .eq("workout_id", rows.workout.id);
 
-      if (deleteLapsError) throw deleteLapsError;
+        if (deleteLapsError) throw deleteLapsError;
 
-      if (lapsToInsert.length) {
         const { error: insertLapsError } = await supabase
           .from("workout_laps")
           .insert(lapsToInsert);

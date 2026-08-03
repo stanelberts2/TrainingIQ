@@ -1,6 +1,6 @@
 import { errorResponse, getCorsHeaders, jsonResponse } from "../_shared/cors.js";
-import { createServiceClient, getEnv } from "../_shared/supabase_clients.js";
-import { fetchStravaActivity, fetchStravaActivityLaps, getValidStravaToken } from "../_shared/strava_client.js";
+import { createServiceClient, getEnv, requireUser } from "../_shared/supabase_clients.js";
+import { fetchStravaActivity, fetchStravaActivityLaps, fetchStravaActivityStreams, getValidStravaToken } from "../_shared/strava_client.js";
 import { mapStravaActivityToWorkoutRows } from "../_shared/strava_mapper.js";
 
 Deno.serve(async (req) => {
@@ -8,12 +8,13 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Method not allowed.", 405, req);
 
   try {
+    const body = await req.json();
     const internalSecret = getEnv("STRAVA_INTERNAL_SECRET");
-    if (req.headers.get("x-internal-secret") !== internalSecret) {
-      return errorResponse("Unauthorized.", 401, req);
-    }
+    const isInternalRequest = internalSecret && req.headers.get("x-internal-secret") === internalSecret;
+    const user = isInternalRequest ? null : await requireUser(req);
 
-    const { userId, activityId } = await req.json();
+    const { userId: requestedUserId, activityId } = body;
+    const userId = isInternalRequest ? requestedUserId : user.id;
     if (!userId || !activityId) throw new Error("userId en activityId zijn verplicht.");
 
     const supabase = createServiceClient();
@@ -36,7 +37,8 @@ Deno.serve(async (req) => {
     const accessToken = await getValidStravaToken(supabase, dataSource);
     const activity = await fetchStravaActivity(accessToken, activityId);
     const laps = await fetchStravaActivityLaps(accessToken, activityId);
-    const rows = mapStravaActivityToWorkoutRows(activity, laps, userId);
+    const streams = await fetchStravaActivityStreams(accessToken, activityId, ["time", "heartrate"]);
+    const rows = mapStravaActivityToWorkoutRows(activity, laps, userId, streams);
 
     const { error: workoutError } = await supabase
       .from("workouts")
@@ -51,16 +53,16 @@ Deno.serve(async (req) => {
 
     if (existingLapsError) throw existingLapsError;
 
-    const lapsToInsert = mergeManualLapMetadata(rows.laps, existingLaps || []);
+    if (rows.laps.length) {
+      const lapsToInsert = mergeManualLapMetadata(rows.laps, existingLaps || []);
 
-    const { error: deleteLapsError } = await supabase
-      .from("workout_laps")
-      .delete()
-      .eq("workout_id", rows.workout.id);
+      const { error: deleteLapsError } = await supabase
+        .from("workout_laps")
+        .delete()
+        .eq("workout_id", rows.workout.id);
 
-    if (deleteLapsError) throw deleteLapsError;
+      if (deleteLapsError) throw deleteLapsError;
 
-    if (lapsToInsert.length) {
       const { error: insertLapsError } = await supabase
         .from("workout_laps")
         .insert(lapsToInsert);

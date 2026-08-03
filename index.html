@@ -10,10 +10,68 @@
     <meta name="theme-color" content="#f6f7f8" />
     <title>TrainIQ</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=data-quality-1" />
+    <link rel="stylesheet" href="./styles.css?v=daily-sync-1" />
   </head>
   <body>
-    <div class="app-shell">
+    <section class="auth-screen" id="authScreen" aria-label="Inloggen bij TrainIQ">
+      <div class="auth-card">
+        <a class="brand auth-brand" href="#dashboard" aria-label="TrainIQ">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>
+            <strong>TrainIQ</strong>
+            <small>Personal training hub</small>
+          </span>
+        </a>
+        <div>
+          <p class="eyebrow">Prive toegang</p>
+          <h1>Log in om je trainingsdata te bekijken.</h1>
+          <p class="auth-copy">Alle workouts, analyses en Strava-data blijven achter je eigen Supabase-login.</p>
+        </div>
+
+        <form class="auth-form" id="authForm">
+          <label>
+            E-mail
+            <input id="authEmailInput" name="email" type="email" autocomplete="email" placeholder="jij@example.com" required />
+          </label>
+          <label>
+            Wachtwoord
+            <input id="authPasswordInput" name="password" type="password" autocomplete="current-password" placeholder="Je wachtwoord" required />
+          </label>
+          <button class="primary-button full-width" type="submit">Inloggen</button>
+        </form>
+
+        <div class="auth-actions">
+          <button class="ghost-button full-width" id="authForgotPasswordButton" type="button">Wachtwoord vergeten</button>
+          <button class="ghost-button full-width" id="authFaceIdButton" type="button">Face ID / opgeslagen wachtwoord</button>
+        </div>
+
+        <div class="auth-reset-panel" id="authResetPanel" hidden>
+          <p class="panel-label">Nieuw wachtwoord</p>
+          <label>
+            Wachtwoord instellen
+            <input id="authNewPasswordInput" type="password" autocomplete="new-password" placeholder="Nieuw wachtwoord" />
+          </label>
+          <button class="primary-button full-width" id="authUpdatePasswordButton" type="button">Wachtwoord opslaan</button>
+        </div>
+
+        <details class="auth-config">
+          <summary>Supabase configuratie</summary>
+          <label>
+            Supabase URL
+            <input id="authSupabaseUrlInput" placeholder="https://your-project-ref.supabase.co" />
+          </label>
+          <label>
+            Supabase anon key
+            <input id="authSupabaseAnonKeyInput" type="password" placeholder="sb_publishable..." />
+          </label>
+          <button class="ghost-button full-width" id="authSaveConfigButton" type="button">Config opslaan</button>
+        </details>
+
+        <div id="authStatus" class="import-status"></div>
+      </div>
+    </section>
+
+    <div class="app-shell" hidden>
       <aside class="sidebar">
         <a class="brand" href="#dashboard" aria-label="TrainIQ dashboard">
           <span class="brand-mark" aria-hidden="true"></span>
@@ -72,7 +130,7 @@
             </article>
           </div>
 
-          <div class="content-grid">
+          <div class="content-grid dashboard-content-grid">
             <article class="panel">
               <div class="panel-header">
                 <div>
@@ -83,7 +141,7 @@
               <div id="latestWorkout" class="detail-list"></div>
             </article>
 
-            <article class="panel">
+            <article class="panel dashboard-wide-panel">
               <div class="panel-header">
                 <div>
                   <p class="panel-label">Sportverdeling</p>
@@ -91,6 +149,16 @@
                 </div>
               </div>
               <div id="sportDistribution" class="bar-list"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Conditie</p>
+                  <h2>Fitness, fatigue en vorm</h2>
+                </div>
+              </div>
+              <div id="dashboardLoad" class="dashboard-load"></div>
             </article>
           </div>
         </section>
@@ -104,6 +172,11 @@
                   <h2>Nieuwe training</h2>
                 </div>
               </div>
+              <details class="inline-collapsible">
+                <summary>
+                  <span>Workout handmatig toevoegen</span>
+                  <b>Open formulier</b>
+                </summary>
               <form class="workout-form" id="workoutForm">
                 <label>
                   Datum
@@ -244,6 +317,7 @@
                 </label>
                 <button class="primary-button" type="submit">Training opslaan</button>
               </form>
+              </details>
             </article>
 
             <article class="panel">
@@ -266,7 +340,47 @@
         </section>
 
         <section class="view" id="analysis" aria-label="Analyse">
-          <div class="content-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Analyse</p>
+                <h2>Trainingsfamilie</h2>
+              </div>
+            </div>
+            <div id="analysisTabs" class="segmented-control analysis-tabs"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Z2 analyse</p>
+                <h2>Run, BikeErg, SkiErg en RowErg</h2>
+              </div>
+            </div>
+            <div id="z2Analysis" class="z2-analysis"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Intensity analyse</p>
+                <h2>VO2max en Threshold</h2>
+              </div>
+            </div>
+            <div id="intensityAnalysis" class="z2-analysis"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Training load</p>
+                <h2>Fitness, fatigue en vorm</h2>
+              </div>
+            </div>
+            <div id="loadAnalysis" class="z2-analysis"></div>
+          </article>
+
+          <div class="content-grid legacy-analysis" hidden>
             <article class="panel">
               <div class="panel-header">
                 <div>
@@ -289,7 +403,7 @@
             </article>
           </div>
 
-          <article class="panel">
+          <article class="panel legacy-analysis" hidden>
             <div class="panel-header">
               <div>
                 <p class="panel-label">Intervalanalyse</p>
@@ -299,7 +413,7 @@
             <div id="intervalComparison" class="interval-comparison"></div>
           </article>
 
-          <article class="panel">
+          <article class="panel legacy-analysis" hidden>
             <div class="panel-header">
               <div>
                 <p class="panel-label">HYROX analyse</p>
@@ -307,6 +421,19 @@
               </div>
             </div>
             <div id="segmentAnalysis" class="segment-analysis"></div>
+          </article>
+        </section>
+
+        <section class="view" id="workoutDetail" aria-label="Workout detail">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Workout analyse</p>
+                <h2>Training detail</h2>
+              </div>
+              <button class="ghost-button" id="workoutDetailBackButton" type="button">Terug</button>
+            </div>
+            <div id="workoutDetailContent" class="workout-detail"></div>
           </article>
         </section>
 
@@ -319,6 +446,47 @@
               </div>
             </div>
             <div id="qualitySummary" class="analysis-summary"></div>
+            <div id="qualitySaveStatus" class="import-status"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Z2 aanvullen</p>
+                <h2>ERG/Bike data voor analyse</h2>
+              </div>
+            </div>
+            <div id="z2ErgDataGaps" class="z2-gap-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">VO2max check</p>
+                <h2>Norwegian 4x4 en VO2max blokken</h2>
+              </div>
+            </div>
+            <div id="vo2DataCheck" class="z2-gap-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Threshold check</p>
+                <h2>Drempel, tempo en over/unders</h2>
+              </div>
+            </div>
+            <div id="thresholdDataCheck" class="z2-gap-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-label">Bulk review</p>
+                <h2>Mogelijke bulkcategorieën</h2>
+              </div>
+            </div>
+            <div id="qualityBulkCategories" class="bulk-category-list"></div>
           </article>
 
           <article class="panel">
@@ -388,8 +556,25 @@
                 </div>
                 <button class="ghost-button full-width" id="stravaSyncNowButton" type="button">Recente Strava activiteiten syncen</button>
                 <button class="ghost-button full-width" id="stravaSyncHistoryButton" type="button">Strava historie syncen</button>
+                <button class="primary-button full-width" id="dailySyncButton" type="button">Dagelijkse sync draaien</button>
               </div>
               <div id="stravaStatus" class="import-status"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-label">Intervals.icu sync</p>
+                  <h2>Betrouwbare load en intervaldata testen</h2>
+                </div>
+                <span class="status-pill" id="intervalsStatusBadge">Niet getest</span>
+              </div>
+              <div class="sync-actions">
+                <p class="help-text">Test of Supabase met jouw Intervals.icu API key data kan ophalen. Er wordt nog niets opgeslagen.</p>
+                <button class="ghost-button full-width" id="intervalsTestButton" type="button">Intervals.icu verbinding testen</button>
+                <button class="ghost-button full-width" id="intervalsPreviewButton" type="button">Preview import bekijken</button>
+              </div>
+              <div id="intervalsStatus" class="import-status"></div>
             </article>
 
             <article class="panel">
@@ -409,39 +594,10 @@
               <div id="importStatus" class="import-status"></div>
             </article>
           </div>
-
-          <div class="content-grid">
-            <article class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="panel-label">Import strategie</p>
-                  <h2>De volgorde die nu klopt</h2>
-                </div>
-              </div>
-              <ol class="roadmap-list">
-                <li>
-                  <strong>Nu:</strong>
-                  betrouwbaar workout-logboek en vergelijkingsanalyse.
-                </li>
-                <li>
-                  <strong>Nu ook:</strong>
-                  Supabase Auth + handmatige cloud-sync.
-                </li>
-                <li>
-                  <strong>Nu bouwen:</strong>
-                  Strava OAuth, webhook-events en automatische activity/lap import.
-                </li>
-                <li>
-                  <strong>Later:</strong>
-                  Garmin via Strava, FIT/CSV export of officiele API als dat haalbaar is.
-                </li>
-              </ol>
-            </article>
-          </div>
         </section>
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=data-quality-1"></script>
+    <script type="module" src="./app.js?v=strava-rate-limit-safe-1"></script>
   </body>
 </html>

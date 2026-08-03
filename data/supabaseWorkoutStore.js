@@ -31,6 +31,37 @@ export async function signInWithEmail(email) {
   return { error };
 }
 
+export async function signInWithPassword(email, password) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { user: null, error: new Error("Supabase is not configured.") };
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  return { user: data?.user || null, error };
+}
+
+export async function resetPasswordForEmail(email) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { error: new Error("Supabase is not configured.") };
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+
+  return { error };
+}
+
+export async function updatePassword(password) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { user: null, error: new Error("Supabase is not configured.") };
+
+  const { data, error } = await supabase.auth.updateUser({ password });
+  return { user: data?.user || null, error };
+}
+
 export async function signOut() {
   const supabase = getSupabaseClient();
   if (!supabase) return { error: new Error("Supabase is not configured.") };
@@ -79,6 +110,88 @@ export async function syncStravaNow(options = 10) {
 
   const { data, error } = await supabase.functions.invoke("strava-sync-now", {
     body,
+  });
+
+  return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
+}
+
+export async function testIntervalsIcuConnection() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { result: null, error: sessionError };
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+
+  const { data, error } = await supabase.functions.invoke("intervals-test", {
+    body: {},
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
+}
+
+export async function previewIntervalsIcuImport(options = {}) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { result: null, error: sessionError };
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+
+  const { data, error } = await supabase.functions.invoke("intervals-test", {
+    body: {
+      previewLimit: options.previewLimit || 8,
+      days: options.days || 30,
+    },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
+}
+
+export async function syncIntervalsIcuSummary(options = {}) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { result: null, error: sessionError };
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+
+  const { data, error } = await supabase.functions.invoke("intervals-sync", {
+    body: {
+      days: options.days || 30,
+      limit: options.limit || 80,
+    },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
+}
+
+export async function importStravaActivity(activityId) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { result: null, error: sessionError };
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+
+  const { data, error } = await supabase.functions.invoke("strava-import-activity", {
+    body: { activityId },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 
   return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
@@ -211,7 +324,8 @@ async function loadSupabaseWorkoutsByIds(ids) {
 }
 
 async function replaceWorkoutLaps(supabase, workouts) {
-  const workoutIds = workouts.map((workout) => workout.id);
+  const workoutsWithLaps = workouts.filter((workout) => (workout.intervals || []).length);
+  const workoutIds = workoutsWithLaps.map((workout) => workout.id);
   if (!workoutIds.length) return null;
 
   const { error: deleteError } = await supabase
@@ -221,7 +335,7 @@ async function replaceWorkoutLaps(supabase, workouts) {
 
   if (deleteError) return deleteError;
 
-  const lapRows = workouts.flatMap((workout) => {
+  const lapRows = workoutsWithLaps.flatMap((workout) => {
     return (workout.intervals || []).map((interval) => intervalToSupabaseLapRow(interval, workout.id));
   });
 

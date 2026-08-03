@@ -3,6 +3,11 @@ function numberOrZero(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function validHr(value) {
+  const hr = Math.round(numberOrZero(value));
+  return hr >= 35 && hr <= 230 ? hr : 0;
+}
+
 function toDate(value) {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
     return value.slice(0, 10);
@@ -90,6 +95,65 @@ function formatDistance(meters) {
   return `${meters}m`;
 }
 
+function streamValues(streams = {}, key) {
+  const values = streams?.[key]?.data;
+  return Array.isArray(values) ? values : [];
+}
+
+function average(values) {
+  const usable = values.filter((value) => Number.isFinite(value) && value > 0);
+  return usable.length ? usable.reduce((sum, value) => sum + value, 0) / usable.length : 0;
+}
+
+function lapStreamRange(lap = {}, index, laps = [], timeStream = []) {
+  const startIndex = Number(lap.start_index);
+  const explicitEndIndex = Number(lap.end_index);
+  const nextStartIndex = Number(laps[index + 1]?.start_index);
+  const hasStartIndex = Number.isFinite(startIndex) && startIndex >= 0;
+  const hasExplicitEndIndex = Number.isFinite(explicitEndIndex) && explicitEndIndex >= startIndex;
+  const hasNextStartIndex = Number.isFinite(nextStartIndex) && nextStartIndex > startIndex;
+  const endIndex = hasExplicitEndIndex
+    ? explicitEndIndex
+    : hasNextStartIndex
+      ? nextStartIndex - 1
+      : Number.NaN;
+
+  if (hasStartIndex && Number.isFinite(endIndex) && endIndex >= startIndex) {
+    return { startIndex, endIndex };
+  }
+
+  const startOffset = numberOrZero(lap.start_offset_seconds);
+  const duration = numberOrZero(lap.moving_time || lap.elapsed_time);
+  if (!timeStream.length || !duration) return null;
+
+  const endOffset = startOffset + duration;
+  const derivedStart = timeStream.findIndex((seconds) => numberOrZero(seconds) >= startOffset);
+  let derivedEnd = timeStream.findIndex((seconds) => numberOrZero(seconds) > endOffset);
+  if (derivedEnd === -1) derivedEnd = timeStream.length;
+
+  return derivedStart >= 0 && derivedEnd > derivedStart
+    ? { startIndex: derivedStart, endIndex: derivedEnd - 1 }
+    : null;
+}
+
+function lapHrFromStreams(lap = {}, index, laps = [], streams = {}) {
+  const timeStream = streamValues(streams, "time");
+  const heartrateStream = streamValues(streams, "heartrate").map(validHr);
+  if (!heartrateStream.length) return { avgHr: 0, maxHr: 0, source: "" };
+
+  const range = lapStreamRange(lap, index, laps, timeStream);
+  if (!range) return { avgHr: 0, maxHr: 0, source: "" };
+
+  const values = heartrateStream.slice(range.startIndex, range.endIndex + 1).filter(Boolean);
+  if (!values.length) return { avgHr: 0, maxHr: 0, source: "" };
+
+  return {
+    avgHr: Math.round(average(values)),
+    maxHr: Math.max(...values),
+    source: "stream",
+  };
+}
+
 export function mapStravaWebhookEvent(payload = {}, userId = null) {
   return {
     user_id: userId,
@@ -104,24 +168,40 @@ export function mapStravaWebhookEvent(payload = {}, userId = null) {
   };
 }
 
-export function mapStravaActivityToWorkoutRows(activity = {}, laps = [], userId) {
+export function mapStravaActivityToWorkoutRows(activity = {}, laps = [], userId, streams = {}) {
   const id = `strava-${activity.id}`;
   const startDate = activity.start_date_local || activity.start_date;
-  const lapRows = laps.map((lap, index) => ({
-    workout_id: id,
-    lap_index: numberOrZero(lap.lap_index) || index + 1,
-    name: lap.name || `Lap ${index + 1}`,
-    exercise_type: "",
-    lap_role: "work",
-    effort_goal: "",
-    start_offset_seconds: numberOrZero(lap.start_index ?? lap.start_offset_seconds),
-    duration_seconds: numberOrZero(lap.moving_time || lap.elapsed_time),
-    distance_meters: numberOrZero(lap.distance),
-    avg_hr: Math.round(numberOrZero(lap.average_heartrate)),
-    max_hr: Math.round(numberOrZero(lap.max_heartrate)),
-    avg_pace: paceFromSecondsAndMeters(lap.moving_time || lap.elapsed_time, lap.distance),
-    raw_payload: lap,
-  }));
+  const timeStream = streamValues(streams, "time");
+  const lapRows = laps.map((lap, index) => {
+    const streamHr = lapHrFromStreams(lap, index, laps, streams);
+    const avgHr = validHr(lap.average_heartrate) || streamHr.avgHr;
+    const maxHr = validHr(lap.max_heartrate) || streamHr.maxHr;
+    const range = lapStreamRange(lap, index, laps, timeStream);
+    const startOffsetSeconds = range && timeStream[range.startIndex] !== undefined
+      ? numberOrZero(timeStream[range.startIndex])
+      : numberOrZero(lap.start_offset_seconds);
+
+    return {
+      workout_id: id,
+      lap_index: numberOrZero(lap.lap_index) || index + 1,
+      name: lap.name || `Lap ${index + 1}`,
+      exercise_type: "",
+      lap_role: "work",
+      effort_goal: "",
+      start_offset_seconds: startOffsetSeconds,
+      duration_seconds: numberOrZero(lap.moving_time || lap.elapsed_time),
+      distance_meters: numberOrZero(lap.distance),
+      avg_hr: avgHr,
+      max_hr: maxHr,
+      avg_pace: paceFromSecondsAndMeters(lap.moving_time || lap.elapsed_time, lap.distance),
+      raw_payload: {
+        ...lap,
+        ...(streamHr.source && !validHr(lap.average_heartrate) ? { derived_avg_hr_from: streamHr.source } : {}),
+        ...(streamHr.source && !validHr(lap.max_heartrate) ? { derived_max_hr_from: streamHr.source } : {}),
+        ...(range ? { stream_start_index: range.startIndex, stream_end_index: range.endIndex } : {}),
+      },
+    };
+  });
   const profile = inferIntervalProfile(lapRows);
   const durationMin = Math.round(numberOrZero(activity.moving_time || activity.elapsed_time) / 60);
   const distanceKm = numberOrZero(activity.distance) / 1000;
@@ -139,8 +219,8 @@ export function mapStravaActivityToWorkoutRows(activity = {}, laps = [], userId)
       workout_type: workoutTypeFromStrava(activity),
       duration_min: durationMin,
       distance_km: Number(distanceKm.toFixed(3)),
-      avg_hr: Math.round(numberOrZero(activity.average_heartrate)),
-      max_hr: Math.round(numberOrZero(activity.max_heartrate)),
+      avg_hr: validHr(activity.average_heartrate),
+      max_hr: validHr(activity.max_heartrate),
       load: 0,
       avg_pace: paceFromSecondsAndMeters(activity.moving_time || activity.elapsed_time, activity.distance),
       elevation_gain: numberOrZero(activity.total_elevation_gain),

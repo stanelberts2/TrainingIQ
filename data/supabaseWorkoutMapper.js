@@ -117,7 +117,7 @@ export function workoutsFromSupabaseRows(rows = []) {
 export function intervalsFromSupabaseLapRows(rows = []) {
   if (!Array.isArray(rows)) return [];
 
-  return rows
+  const intervals = rows
     .sort((a, b) => a.lap_index - b.lap_index)
     .map((row) => ({
       intervalIndex: row.lap_index,
@@ -133,6 +133,65 @@ export function intervalsFromSupabaseLapRows(rows = []) {
       avgPace: row.avg_pace,
       rawPayload: row.raw_payload || {},
     }));
+
+  return dedupeIntervals(intervals);
+}
+
+function dedupeIntervals(intervals = []) {
+  const byKey = new Map();
+  intervals.forEach((interval) => {
+    const key = intervalDedupeKey(interval);
+    if (!key) {
+      byKey.set(`fallback:${byKey.size}`, interval);
+      return;
+    }
+
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? mergeInterval(existing, interval) : interval);
+  });
+
+  return Array.from(byKey.values())
+    .sort((a, b) => {
+      const offsetA = Number(a.startOffsetSeconds || 0);
+      const offsetB = Number(b.startOffsetSeconds || 0);
+      if (offsetA || offsetB) return offsetA - offsetB;
+      return Number(a.intervalIndex || 0) - Number(b.intervalIndex || 0);
+    })
+    .map((interval, index) => ({
+      ...interval,
+      intervalIndex: index + 1,
+    }));
+}
+
+function intervalDedupeKey(interval = {}) {
+  const startOffset = Number(interval.startOffsetSeconds || 0);
+  const duration = Number(interval.durationSeconds || 0);
+  const distance = Number(interval.distanceMeters || 0);
+  const exerciseType = interval.exerciseType || "";
+  const role = interval.lapRole || "";
+  const index = Number(interval.intervalIndex || 0);
+
+  if (startOffset) return ["offset", startOffset, duration, distance, exerciseType, role].join(":");
+  if (duration || distance || exerciseType || role || index) return ["index", index, duration, distance, exerciseType, role].join(":");
+  return "";
+}
+
+function mergeInterval(existing, incoming) {
+  return {
+    ...existing,
+    ...incoming,
+    name: incoming.name || existing.name,
+    exerciseType: incoming.exerciseType || existing.exerciseType,
+    lapRole: incoming.lapRole || existing.lapRole,
+    effortGoal: incoming.effortGoal || existing.effortGoal,
+    avgHr: incoming.avgHr || existing.avgHr,
+    maxHr: incoming.maxHr || existing.maxHr,
+    avgPace: incoming.avgPace || existing.avgPace,
+    rawPayload: {
+      ...(existing.rawPayload || {}),
+      ...(incoming.rawPayload || {}),
+    },
+  };
 }
 
 export function segmentsFromSupabaseRows(rows = []) {
