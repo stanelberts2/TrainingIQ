@@ -24,7 +24,7 @@ export async function signInWithEmail(email) {
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: window.location.origin,
+      emailRedirectTo: currentAppUrl(),
     },
   });
 
@@ -48,7 +48,7 @@ export async function resetPasswordForEmail(email) {
   if (!supabase) return { error: new Error("Supabase is not configured.") };
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin,
+    redirectTo: currentAppUrl(),
   });
 
   return { error };
@@ -60,6 +60,13 @@ export async function updatePassword(password) {
 
   const { data, error } = await supabase.auth.updateUser({ password });
   return { user: data?.user || null, error };
+}
+
+function currentAppUrl() {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 export async function signOut() {
