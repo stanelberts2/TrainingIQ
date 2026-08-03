@@ -10,7 +10,7 @@ import {
   sortWorkoutsByDate,
 } from "./data/workoutStore.js";
 
-const TEMP_DISABLE_AUTH_GATE = true;
+const TEMP_DISABLE_AUTH_GATE = false;
 
 const state = {
   workouts: loadStoredWorkouts(),
