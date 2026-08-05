@@ -24,6 +24,7 @@ const state = {
   analysisTab: "z2",
   z2AnalysisTab: "run",
   z2PeriodMonths: 3,
+  intensityPeriodMonths: 3,
   workoutDetailReturnView: "analysis",
   z2WorkoutPages: {
     run: 1,
@@ -104,6 +105,28 @@ const Z2_ANALYSIS_RULES = {
   maxBikeWorkBlockSeconds: 120 * 60,
   skiRowPace500RangeSec: { min: 80, max: 240 },
   bikeWattsRange: { min: 30, max: 500 },
+};
+const INTENSITY_ANALYSIS_RULES = {
+  vo2: {
+    label: "VO2 max",
+    family: "vo2max",
+    targetLabel: "VO2 werkzone: 3:45-4:08/km",
+    paceMin: 225,
+    paceMax: 248,
+    progressPaceSec: 5,
+    progressDecaySec: 8,
+    goodPaceLabel: "Werkblokken rond 3:45-4:08/km. HR is optioneel; pace en repkwaliteit tellen eerst.",
+  },
+  threshold: {
+    label: "Threshold",
+    family: "threshold",
+    targetLabel: "Threshold: rond 4:25/km",
+    paceMin: 250,
+    paceMax: 285,
+    progressPaceSec: 5,
+    progressDecaySec: 6,
+    goodPaceLabel: "Werkblokken rond 4:10-4:45/km. Rust/warming-up/cooling-down tellen niet mee.",
+  },
 };
 
 const els = {
@@ -839,41 +862,60 @@ function renderLoadAnalysis() {
 }
 
 function renderIntensityFamilyDetail(kind, title, subtitle) {
-  const sessions = intensitySessions(kind);
+  const sourceSessions = intensitySessions(kind);
+  const sessions = intensitySessionsForPeriod(sourceSessions, state.intensityPeriodMonths, 0);
+  const previous = intensitySessionsForPeriod(sourceSessions, state.intensityPeriodMonths, 1);
   const incomplete = intensityIncompleteSessions(kind);
-  const usable = sessions.filter((session) => session.metrics.avgPace);
   const latest = sessions[0] || null;
   const best = kind === "vo2" ? bestVo2Session(sessions) : null;
-  const previous = latest ? comparableIntensitySessions(latest, sessions).filter((session) => session.workout.id !== latest.workout.id) : [];
-  const avgPace = average(usable.map((session) => session.metrics.avgPace));
-  const avgDecay = average(usable.map((session) => kind === "vo2" ? Math.abs(session.metrics.decaySeconds || 0) : session.metrics.variationPct || 0));
-  const totalWorkSeconds = sessions.reduce((sum, session) => sum + numberOrZero(session.metrics.durationSeconds), 0);
-  const totalDistanceMeters = sessions.reduce((sum, session) => sum + numberOrZero(session.metrics.distanceMeters), 0);
+  const comparablePrevious = latest ? comparableIntensitySessions(latest, sourceSessions).filter((session) => new Date(session.workout.date) < new Date(latest.workout.date)) : previous;
+  const currentStats = intensityStats(sessions, kind);
+  const previousStats = intensityStats(previous, kind);
+  const allStats = intensityStats(sourceSessions, kind);
+  const trendData = intensityTrendData(sourceSessions, kind, state.intensityPeriodMonths);
+  const yearBackStats = intensityYearBackStats(sourceSessions, kind, state.intensityPeriodMonths);
+  const yearBackText = intensityYearBackText(currentStats, yearBackStats, kind);
+  const quality = intensityDataQualitySummary(kind, sourceSessions, incomplete);
 
   return `
     <article class="z2-erg-analysis-panel intensity-family-panel">
+      <div class="z2-controls" aria-label="${escapeHtml(title)} analyse filters">
+        <div class="segmented-control" aria-label="Periode">
+          ${Z2_PERIODS.map((months) => `
+            <button type="button" data-intensity-period="${months}" class="${months === state.intensityPeriodMonths ? "is-active" : ""}">
+              ${months} ${months === 1 ? "maand" : "maanden"}
+            </button>
+          `).join("")}
+        </div>
+        <div class="z2-metric-toggles" aria-label="Grafiek informatie">
+          ${Z2_METRIC_TOGGLES.map((toggle) => `
+            <label>
+              <input type="checkbox" data-z2-metric-toggle="${toggle.key}" ${state.z2VisibleMetrics[toggle.key] ? "checked" : ""} />
+              ${toggle.label}
+            </label>
+          `).join("")}
+        </div>
+      </div>
       <div class="z2-analysis-header">
         <div>
           <span>${escapeHtml(title)}</span>
-          <strong>${sessions.length} sessie(s)</strong>
+          <strong>${allStats.count} sessie(s) · ${formatDuration(Math.round(allStats.durationMin))} · ${allStats.distanceKm ? `${allStats.distanceKm.toFixed(1)} km` : "afstand -"}</strong>
           <small>${escapeHtml(subtitle)}${incomplete.length ? ` · ${incomplete.length} naar datacheck` : ""}</small>
         </div>
         <div>
-          <span>Gem. werkpace</span>
-          <strong>${avgPace ? formatPacePerKm(avgPace) : "-"}</strong>
-          <small>${formatDuration(Math.round(totalWorkSeconds / 60))} werk · ${(totalDistanceMeters / 1000).toFixed(1)} km</small>
+          <span>${state.intensityPeriodMonths} maanden</span>
+          <strong>${currentStats.avgPace ? formatPacePerKm(currentStats.avgPace) : "-"}</strong>
+          <small>${currentStats.avgHr ? `${Math.round(currentStats.avgHr)} bpm` : "HR optioneel"} · laatste: ${latest ? formatDate(latest.workout.date) : "-"}</small>
         </div>
       </div>
       ${sessions.length ? `
-        <div class="z2-quality-grid analysis-model-grid">
-          <div><span>Goede blokken</span><strong>${sessions.reduce((sum, session) => sum + numberOrZero(kind === "vo2" ? session.metrics.goodReps : session.metrics.goodBlocks), 0)}</strong><small>Met pace + tijd</small></div>
-          <div><span>${kind === "vo2" ? "Gem. verval" : "Gem. variatie"}</span><strong>${kind === "vo2" ? `${Math.round(avgDecay)} sec/km` : `${avgDecay.toFixed(1)}%`}</strong><small>${kind === "vo2" ? "Eerste vs laatste rep" : "Pace-stabiliteit"}</small></div>
-          <div><span>Laatste sessie</span><strong>${latest ? formatDate(latest.workout.date) : "-"}</strong><small>${latest ? escapeHtml(latest.workout.title || "Training") : "-"}</small></div>
-          <div><span>${kind === "vo2" ? "Beste sessie" : "Vergelijkbaar"}</span><strong>${kind === "vo2" && best ? formatPacePerKm(best.metrics.avgPace) : previous.length}</strong><small>${kind === "vo2" && best ? `${formatDate(best.workout.date)} · ${best.metrics.goodReps}/${best.metrics.reps} reps` : "Zelfde profiel/familie"}</small></div>
-        </div>
+        ${renderIntensityProgressCards(kind, currentStats, previousStats, best)}
+        ${renderIntensityReferenceCard(kind, currentStats, sessions)}
+        ${renderIntensityDataQualityPanel(quality, kind)}
+        ${renderIntensityVisualSummary(kind, trendData, currentStats, yearBackStats, yearBackText)}
         ${kind === "vo2" ? renderVo2QualitySummary(sessions, latest, best) : ""}
-        ${latest ? renderIntensityRepComparison(kind, latest, previous) : ""}
-        ${renderIntensitySessionList(kind, sessions)}
+        ${latest ? renderIntensityRepComparison(kind, latest, comparablePrevious) : ""}
+        ${renderIntensitySessionList(kind, sourceSessions)}
       ` : `<p class="empty-state">Nog geen bruikbare ${escapeHtml(title)} data.</p>`}
     </article>
   `;
@@ -887,6 +929,307 @@ function bestVo2Session(sessions) {
       if (repDelta) return repDelta;
       return numberOrZero(a.metrics.avgPace) - numberOrZero(b.metrics.avgPace);
     })[0] || null;
+}
+
+function intensitySessionsForPeriod(sessions, months, previousOffset = 0) {
+  const anchor = latestWorkoutDate(sessions.map((session) => session.workout)) || new Date();
+  const end = new Date(anchor);
+  end.setDate(end.getDate() + 1);
+  end.setMonth(end.getMonth() - (months * previousOffset));
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - months);
+  return sessions.filter((session) => {
+    const date = new Date(session.workout.date);
+    return date >= start && date < end;
+  });
+}
+
+function intensityStats(sessions, kind) {
+  const rows = sessions.flatMap((session) => session.metrics.rows || [])
+    .filter((row) => row.paceSecPerKm || row.durationSeconds || row.distanceMeters);
+  const paceRows = rows.filter((row) => row.paceSecPerKm);
+  const durationSeconds = rows.reduce((sum, row) => sum + numberOrZero(row.durationSeconds), 0);
+  const distanceMeters = rows.reduce((sum, row) => sum + numberOrZero(row.distanceMeters), 0);
+  const paceValues = paceRows.map((row) => row.paceSecPerKm);
+  const avgPace = weightedPaceFromRows(paceRows);
+  const firstPace = paceValues[0] || 0;
+  const lastPace = paceValues[paceValues.length - 1] || 0;
+  const decaySeconds = firstPace && lastPace ? lastPace - firstPace : 0;
+  const paceSpread = paceValues.length ? Math.max(...paceValues) - Math.min(...paceValues) : 0;
+  const variationPct = avgPace ? (standardDeviation(paceValues) / avgPace) * 100 : 0;
+
+  return {
+    count: sessions.length,
+    sessions,
+    rows,
+    usableRows: paceRows.length,
+    durationSeconds,
+    durationMin: durationSeconds / 60,
+    distanceKm: distanceMeters / 1000,
+    avgPace,
+    avgHr: average(rows.map((row) => validHr(row.avgHr))),
+    load: average(sessions.map((session) => estimatedTrainingLoad(session.workout, INTENSITY_ANALYSIS_RULES[kind].family))),
+    totalLoad: sessions.reduce((sum, session) => sum + estimatedTrainingLoad(session.workout, INTENSITY_ANALYSIS_RULES[kind].family), 0),
+    fastestPace: paceValues.length ? Math.min(...paceValues) : 0,
+    slowestPace: paceValues.length ? Math.max(...paceValues) : 0,
+    decaySeconds,
+    paceSpread,
+    variationPct,
+  };
+}
+
+function weightedPaceFromRows(rows) {
+  const weighted = rows.filter((row) => row.paceSecPerKm && numberOrZero(row.distanceMeters));
+  const totalDistanceMeters = weighted.reduce((sum, row) => sum + numberOrZero(row.distanceMeters), 0);
+  const totalSeconds = weighted.reduce((sum, row) => sum + numberOrZero(row.durationSeconds), 0);
+  if (totalDistanceMeters && totalSeconds) return totalSeconds / (totalDistanceMeters / 1000);
+  return average(rows.map((row) => row.paceSecPerKm).filter(Boolean));
+}
+
+function renderIntensityProgressCards(kind, currentStats, previousStats, best) {
+  const verdict = intensityProgressVerdict(kind, currentStats, previousStats);
+  const decayLabel = kind === "vo2" ? "Verval" : "Stabiliteit";
+  const decayValue = kind === "vo2"
+    ? (currentStats.decaySeconds ? formatSignedPace(currentStats.decaySeconds) : "-")
+    : (currentStats.variationPct ? `${currentStats.variationPct.toFixed(1)}%` : "-");
+  const decayDelta = kind === "vo2"
+    ? formatSignedPace(currentStats.decaySeconds - previousStats.decaySeconds)
+    : previousStats.variationPct ? `${(currentStats.variationPct - previousStats.variationPct).toFixed(1)} pt versus vorige periode` : "Geen vorige periode";
+
+  return `
+    <div class="z2-progress-grid">
+      <article class="z2-progress-card ${verdict.tone}">
+        <span>Progressie</span>
+        <strong>${verdict.title}</strong>
+        <small>${verdict.detail}</small>
+      </article>
+      <article class="z2-progress-card">
+        <span>Gem. werkpace</span>
+        <strong>${formatPacePerKm(currentStats.avgPace)}</strong>
+        <small>${formatPaceDelta(currentStats.avgPace, previousStats.avgPace)}</small>
+      </article>
+      <article class="z2-progress-card">
+        <span>${decayLabel}</span>
+        <strong>${decayValue}</strong>
+        <small>${decayDelta}</small>
+      </article>
+      <article class="z2-progress-card">
+        <span>Kwaliteitsvolume</span>
+        <strong>${formatDuration(Math.round(currentStats.durationMin))}</strong>
+        <small>${currentStats.usableRows} werkblok(ken) · ${currentStats.distanceKm ? `${currentStats.distanceKm.toFixed(1)} km` : "afstand -"}</small>
+      </article>
+      <article class="z2-progress-card">
+        <span>${kind === "vo2" ? "Beste sessie" : "Beste blok"}</span>
+        <strong>${kind === "vo2" && best?.metrics.avgPace ? formatPacePerKm(best.metrics.avgPace) : formatPacePerKm(currentStats.fastestPace)}</strong>
+        <small>${kind === "vo2" && best ? `${formatDate(best.workout.date)} · ${best.metrics.goodReps}/${best.metrics.reps} reps` : "Snelste werkblok in periode"}</small>
+      </article>
+    </div>
+  `;
+}
+
+function intensityProgressVerdict(kind, currentStats, previousStats) {
+  const config = INTENSITY_ANALYSIS_RULES[kind];
+  if (!currentStats.count) {
+    return { tone: "is-neutral", title: "Nog geen data", detail: "Deze periode heeft nog geen werkblokken die meetellen." };
+  }
+  if (!previousStats.count || !previousStats.avgPace) {
+    return { tone: "is-neutral", title: "Nieuwe baseline", detail: "Nog geen vorige periode voor een eerlijke vergelijking." };
+  }
+
+  const paceDelta = currentStats.avgPace && previousStats.avgPace ? currentStats.avgPace - previousStats.avgPace : 0;
+  const decayDelta = Math.abs(currentStats.decaySeconds || 0) - Math.abs(previousStats.decaySeconds || 0);
+  const stableOrBetterDecay = decayDelta <= config.progressDecaySec;
+  const better = paceDelta <= -config.progressPaceSec && stableOrBetterDecay;
+  const worse = paceDelta >= config.progressPaceSec && decayDelta > config.progressDecaySec;
+
+  if (better) {
+    return {
+      tone: "is-good",
+      title: "Progressie zichtbaar",
+      detail: `Werkblokken zijn minimaal ${config.progressPaceSec} sec/km sneller zonder duidelijk slechter verval.`,
+    };
+  }
+  if (worse) {
+    return {
+      tone: "is-warning",
+      title: "Zwaarder of minder strak",
+      detail: "Werkpace is langzamer en de blokkwaliteit lijkt minder stabiel dan de vorige periode.",
+    };
+  }
+  return {
+    tone: "is-neutral",
+    title: "Stabiel",
+    detail: `Nog geen duidelijke sprong volgens je drempel van ${config.progressPaceSec} sec/km.`,
+  };
+}
+
+function renderIntensityReferenceCard(kind, currentStats, sessions) {
+  const config = INTENSITY_ANALYSIS_RULES[kind];
+  const inTarget = currentStats.rows.filter((row) => row.paceSecPerKm >= config.paceMin && row.paceSecPerKm <= config.paceMax).length;
+  const tooFast = currentStats.rows.filter((row) => row.paceSecPerKm && row.paceSecPerKm < config.paceMin).length;
+  const tooSlow = currentStats.rows.filter((row) => row.paceSecPerKm && row.paceSecPerKm > config.paceMax).length;
+  const total = currentStats.rows.filter((row) => row.paceSecPerKm).length;
+
+  return `
+    <article class="z2-zone-card">
+      <div class="z2-zone-header">
+        <div>
+          <span>Nieuwe testzones · VO2max ${RUN_TEST_PROFILE.vo2Max}</span>
+          <strong>${config.label}: ${config.targetLabel}</strong>
+        </div>
+        <small>Test ${formatDate(RUN_TEST_PROFILE.date)} · D1 ${RUN_TEST_PROFILE.threshold1.hr} bpm · D2 ${RUN_TEST_PROFILE.threshold2.hr} bpm · max aeroob ${RUN_TEST_PROFILE.maxAerobic.hr} bpm</small>
+      </div>
+      <div class="z2-zone-grid">
+        <div>
+          <span>Deze periode</span>
+          <strong>${formatPacePerKm(currentStats.avgPace)} · ${currentStats.avgHr ? `${Math.round(currentStats.avgHr)} bpm` : "HR optioneel"}</strong>
+          <small>${config.goodPaceLabel}</small>
+        </div>
+        <div>
+          <span>Binnen doelpace</span>
+          <strong>${total ? `${Math.round((inTarget / total) * 100)}%` : "-"}</strong>
+          <small>${inTarget}/${total} werkblok(ken) binnen ${paceTextFromSeconds(config.paceMin)}-${paceTextFromSeconds(config.paceMax)}/km</small>
+        </div>
+        <div>
+          <span>Sneller</span>
+          <strong>${tooFast}</strong>
+          <small>Sneller dan het doelvenster; kan race/all-out of fout label zijn.</small>
+        </div>
+        <div>
+          <span>Langzamer</span>
+          <strong>${tooSlow}</strong>
+          <small>Langzamer dan het doelvenster; check rust, herstel of incomplete data.</small>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderIntensityDataQualityPanel(quality, kind) {
+  if (!quality.total) return "";
+  return `
+    <article class="z2-quality-panel ${quality.usablePct >= 80 ? "is-good" : quality.usablePct >= 50 ? "is-warning" : "is-low"}">
+      <div>
+        <span>Datakwaliteit analyse</span>
+        <strong>${quality.usablePct}% bruikbaar</strong>
+        <small>${kind === "vo2" ? "VO2 vraagt vooral werkblok-pace, tijd en afstand." : "Threshold vraagt werkblok-pace, tijd, afstand en stabiliteit."}</small>
+      </div>
+      <div class="z2-quality-grid">
+        <div><strong>${quality.usable}</strong><span>meegeteld</span></div>
+        <div><strong>${quality.incomplete}</strong><span>datacheck</span></div>
+        <div><strong>${quality.unknown}</strong><span>bewust onbekend</span></div>
+        <div><strong>${quality.total}</strong><span>totaal</span></div>
+      </div>
+    </article>
+  `;
+}
+
+function intensityDataQualitySummary(kind, sessions, incomplete) {
+  const unknown = sessions.filter((session) => (session.workout.intervals || []).some((interval) => interval.rawPayload?.metricUnavailable)).length;
+  const usable = sessions.filter(intensitySessionIsUsable).length;
+  const total = sessions.length + incomplete.length;
+  return {
+    total,
+    usable,
+    incomplete: incomplete.length,
+    unknown,
+    usablePct: total ? Math.round((usable / total) * 100) : 0,
+  };
+}
+
+function renderIntensityVisualSummary(kind, trendData, currentStats, yearBackStats, yearBackText) {
+  const chart = renderZ2TrendChart(trendData, "run");
+  return `
+    <div class="z2-visual-grid">
+      <article class="z2-chart-card">
+        <div class="z2-chart-header">
+          <div>
+            <span>${state.intensityPeriodMonths === 1 ? "1 maand trend" : `${state.intensityPeriodMonths} maanden trend`}</span>
+            <strong>Werkpace + HR</strong>
+          </div>
+          <small>${trendData.filter((point) => point.count).length} maand(en) met data</small>
+        </div>
+        ${chart}
+      </article>
+      <article class="z2-chart-card">
+        <div class="z2-chart-header">
+          <div>
+            <span>Jaar-terug check</span>
+            <strong>${yearBackText.title}</strong>
+          </div>
+          <small>${state.intensityPeriodMonths}m nu vs zelfde periode vorig jaar</small>
+        </div>
+        <p class="z2-chart-copy">${yearBackText.body}</p>
+        <div class="z2-year-grid">
+          ${renderIntensityYearMetric("Nu", currentStats)}
+          ${renderIntensityYearMetric("Vorig jaar", yearBackStats)}
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderIntensityYearMetric(label, stats) {
+  return `
+    <div>
+      <span>${label}</span>
+      <strong>${formatPacePerKm(stats.avgPace)}</strong>
+      <small>${stats.avgHr ? `${Math.round(stats.avgHr)} bpm` : "HR -"} · ${stats.usableRows} blok(ken)</small>
+    </div>
+  `;
+}
+
+function intensityYearBackStats(sessions, kind, months) {
+  const anchor = latestWorkoutDate(sessions.map((session) => session.workout)) || new Date();
+  const end = new Date(anchor);
+  end.setFullYear(end.getFullYear() - 1);
+  end.setDate(end.getDate() + 1);
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - months);
+  return intensityStats(sessions.filter((session) => {
+    const date = new Date(session.workout.date);
+    return date >= start && date < end;
+  }), kind);
+}
+
+function intensityYearBackText(currentStats, yearBackStats, kind) {
+  if (!yearBackStats.count || !yearBackStats.avgPace) {
+    return {
+      title: "Nog geen jaarbasis",
+      body: "Er is in dezelfde periode vorig jaar nog geen vergelijkbare werkblokdata gevonden.",
+    };
+  }
+  const paceDelta = currentStats.avgPace && yearBackStats.avgPace ? currentStats.avgPace - yearBackStats.avgPace : 0;
+  const hrDelta = currentStats.avgHr && yearBackStats.avgHr ? currentStats.avgHr - yearBackStats.avgHr : 0;
+  const better = paceDelta <= -INTENSITY_ANALYSIS_RULES[kind].progressPaceSec;
+  return {
+    title: better ? "Beter dan vorig jaar" : "Vergelijk met nuance",
+    body: `Ten opzichte van dezelfde periode vorig jaar: ${formatSignedPace(paceDelta)} en ${formatSignedNumber(hrDelta, "bpm")}.`,
+  };
+}
+
+function intensityTrendData(sessions, kind, months = 12) {
+  const anchor = latestWorkoutDate(sessions.map((session) => session.workout)) || new Date();
+  const points = [];
+  for (let index = months - 1; index >= 0; index -= 1) {
+    const start = new Date(anchor.getFullYear(), anchor.getMonth() - index, 1);
+    const end = new Date(anchor.getFullYear(), anchor.getMonth() - index + 1, 1);
+    const stats = intensityStats(sessions.filter((session) => {
+      const date = new Date(session.workout.date);
+      return date >= start && date < end;
+    }), kind);
+    points.push({
+      label: start.toLocaleDateString("nl-NL", { month: "short" }),
+      count: stats.count,
+      metric: stats.avgPace,
+      hr: stats.avgHr,
+      load: stats.load,
+      totalLoad: stats.totalLoad,
+      volume: stats.durationMin,
+      distance: stats.distanceKm,
+    });
+  }
+  return points;
 }
 
 function renderVo2QualitySummary(sessions, latest, best) {
@@ -8953,6 +9296,13 @@ function bindEvents() {
   });
 
   els.intensityAnalysis?.addEventListener("click", (event) => {
+    const periodButton = event.target.closest("[data-intensity-period]");
+    if (periodButton) {
+      state.intensityPeriodMonths = Number(periodButton.dataset.intensityPeriod) || 3;
+      renderIntensityAnalysis();
+      return;
+    }
+
     const row = event.target.closest("[data-workout-id]");
     if (!row) return;
 
@@ -8962,6 +9312,18 @@ function bindEvents() {
     setView("workoutDetail");
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
+
+  els.intensityAnalysis?.addEventListener("change", (event) => {
+    const toggle = event.target.closest("[data-z2-metric-toggle]");
+    if (!toggle) return;
+    state.z2VisibleMetrics[toggle.dataset.z2MetricToggle] = toggle.checked;
+    renderIntensityAnalysis();
+  });
+
+  els.intensityAnalysis?.addEventListener("mouseover", handleZ2ChartTooltip);
+  els.intensityAnalysis?.addEventListener("focusin", handleZ2ChartTooltip);
+  els.intensityAnalysis?.addEventListener("mouseout", clearZ2ChartTooltip);
+  els.intensityAnalysis?.addEventListener("focusout", clearZ2ChartTooltip);
 
   els.loadAnalysis?.addEventListener("click", (event) => {
     const row = event.target.closest("[data-workout-id]");
