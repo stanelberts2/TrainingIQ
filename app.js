@@ -155,6 +155,7 @@ const els = {
   authForm: document.querySelector("#authForm"),
   authEmailInput: document.querySelector("#authEmailInput"),
   authPasswordInput: document.querySelector("#authPasswordInput"),
+  authSignUpButton: document.querySelector("#authSignUpButton"),
   authForgotPasswordButton: document.querySelector("#authForgotPasswordButton"),
   authFaceIdButton: document.querySelector("#authFaceIdButton"),
   authResetPanel: document.querySelector("#authResetPanel"),
@@ -7559,6 +7560,45 @@ async function handleAuthPasswordLogin(event) {
   }
 }
 
+async function handleAuthSignUp() {
+  const email = els.authEmailInput.value.trim();
+  const password = els.authPasswordInput.value;
+
+  if (!hasSupabaseConfig()) {
+    updateAuthStatus("Sla eerst je Supabase-configuratie op.", "error");
+    return;
+  }
+  if (!email || !password) {
+    updateAuthStatus("Vul je e-mail en wachtwoord in.", "error");
+    return;
+  }
+  if (password.length < 8) {
+    updateAuthStatus("Gebruik minimaal 8 tekens voor je wachtwoord.", "error");
+    return;
+  }
+
+  try {
+    updateAuthStatus("Account wordt aangemaakt...", "idle");
+    const { signUpWithPassword } = await loadSupabaseModule();
+    const { user, session, error } = await signUpWithPassword(email, password);
+    if (error) throw error;
+
+    if (session && user) {
+      state.supabaseUser = user;
+      state.passwordRecoveryMode = false;
+      setAuthGate(user);
+      updateAuthStatus(`Account aangemaakt en ingelogd als ${user.email || email}.`, "ready");
+      updateSupabaseStatus("Ingelogd bij Supabase.", "ready");
+      await handleSupabaseDownload();
+      return;
+    }
+
+    updateAuthStatus("Account aangemaakt. Check je e-mail om je account te bevestigen en log daarna in.", "ready");
+  } catch (error) {
+    updateAuthStatus(error.message, "error");
+  }
+}
+
 async function handleAuthForgotPassword() {
   const email = els.authEmailInput.value.trim();
   if (!hasSupabaseConfig()) {
@@ -8952,6 +8992,7 @@ function bindEvents() {
   });
 
   els.authForm?.addEventListener("submit", handleAuthPasswordLogin);
+  els.authSignUpButton?.addEventListener("click", handleAuthSignUp);
   els.authForgotPasswordButton?.addEventListener("click", handleAuthForgotPassword);
   els.authFaceIdButton?.addEventListener("click", handleAuthFaceId);
   els.authSaveConfigButton?.addEventListener("click", handleAuthSaveConfig);
