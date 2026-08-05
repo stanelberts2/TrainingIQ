@@ -1,4 +1,4 @@
-const CACHE_NAME = "trainiq-v66";
+const CACHE_NAME = "trainiq-v67";
 const APP_FILES = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {

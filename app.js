@@ -40,6 +40,10 @@ const state = {
 };
 
 const SUPABASE_CONFIG_KEY = "trainiq-supabase-config";
+const DEFAULT_SUPABASE_CONFIG = {
+  url: "https://izbhhunefxtygkswwsjl.supabase.co",
+  anonKey: "sb_publishable_cGWG00suCMcvDO_pdMxuZg_1KG65wYP",
+};
 const STRAVA_HISTORY_PAGE_KEY = "trainiq-strava-history-page";
 const STRAVA_RECENT_SYNC_SIZE = 15;
 const STRAVA_HISTORY_BATCH_SIZE = 8;
@@ -6281,9 +6285,9 @@ function resetStrengthRows() {
 function getSupabaseConfig() {
   try {
     const stored = localStorage.getItem(SUPABASE_CONFIG_KEY);
-    return stored ? JSON.parse(stored) : { url: "", anonKey: "" };
+    return stored ? { ...DEFAULT_SUPABASE_CONFIG, ...JSON.parse(stored) } : DEFAULT_SUPABASE_CONFIG;
   } catch {
-    return { url: "", anonKey: "" };
+    return DEFAULT_SUPABASE_CONFIG;
   }
 }
 
