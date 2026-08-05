@@ -9,6 +9,7 @@ function normalizeOrigin(value) {
 
 const allowedOrigins = new Set([
   normalizeOrigin(Deno.env.get("APP_URL")),
+  "https://stanelberts2.github.io",
   "http://127.0.0.1:5174",
   "http://localhost:5174",
   "http://127.0.0.1:5173",
