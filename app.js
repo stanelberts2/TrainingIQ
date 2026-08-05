@@ -22,6 +22,7 @@ const state = {
   supabaseUser: null,
   passwordRecoveryMode: false,
   cloudLoaded: false,
+  autoDailySyncStarted: false,
   syncStatus: {
     tone: "idle",
     title: "Lokale basis actief",
@@ -649,6 +650,12 @@ function renderSyncSidebar() {
       tone: "ready",
       title: "Supabase login actief",
       text: "Cloud-data wordt geladen of staat klaar om op te halen.",
+    };
+  } else {
+    status = {
+      tone: "idle",
+      title: "Supabase voorbereid",
+      text: "Login om cloud-data en sync te gebruiken.",
     };
   }
 
@@ -1964,7 +1971,7 @@ function getZ2Groups() {
     {
       key: "run",
       label: "Z2 hardlopen",
-      workouts: z2Workouts.filter((workout) => z2Subtype(workout) === "run"),
+      workouts: z2Workouts.filter(isPureZ2RunWorkout),
     },
     {
       key: "bike",
@@ -1982,6 +1989,14 @@ function getZ2Groups() {
       workouts: z2Workouts.filter((workout) => hasErgComponent(workout, "row_erg")),
     },
   ];
+}
+
+function isPureZ2RunWorkout(workout) {
+  if (workout.sport !== "running") return false;
+  if (z2Subtype(workout) !== "run") return false;
+  if (["ski_erg", "row_erg", "bike_erg"].some((type) => hasErgComponent(workout, type))) return false;
+  if (isTrueHyroxWorkout(workout)) return false;
+  return true;
 }
 
 function isExcludedFromZ2Analysis(workout) {
@@ -4663,6 +4678,8 @@ function renderZ2WorkoutSixMonthComparison(workout, group) {
   });
   const baselineStats = z2StatsForGroupWorkouts(baselineWorkouts, group.key);
   const metric = z2ComparisonMetricForGroup(group.key, selectedStats, baselineStats);
+  const metricLabel = group.key === "run" ? "Gem. pace" : group.key === "bike" ? "Gem. wattage" : "Gem. /500m";
+  const baselineMetricLabel = group.key === "run" ? "Pace 6m terug" : group.key === "bike" ? "Wattage 6m terug" : "/500m 6m terug";
 
   return `
     <section class="workout-detail-section">
@@ -4674,25 +4691,25 @@ function renderZ2WorkoutSixMonthComparison(workout, group) {
       </div>
       ${baselineStats.count ? `
         <div class="z2-detail-grid">
-          <div class="z2-progress-card">
-            <span>Deze workout</span>
-            <strong>${metric.current}</strong>
-            <small>${selectedStats.avgHr ? `${Math.round(selectedStats.avgHr)} bpm` : "HR -"}</small>
-          </div>
-          <div class="z2-progress-card">
-            <span>6 maanden terug</span>
-            <strong>${metric.baseline}</strong>
-            <small>${baselineStats.avgHr ? `${Math.round(baselineStats.avgHr)} bpm` : "HR -"} · ${baselineStats.count} sessie(s)</small>
-          </div>
           <div class="z2-progress-card ${metric.tone}">
-            <span>Tempo/vermogen verschil</span>
-            <strong>${metric.delta}</strong>
-            <small>${metric.helper}</small>
+            <span>${metricLabel}</span>
+            <strong>${metric.current}</strong>
+            <small>${metric.delta}</small>
           </div>
           <div class="z2-progress-card">
-            <span>Hartslag verschil</span>
-            <strong>${formatHrDelta(selectedStats.avgHr, baselineStats.avgHr)}</strong>
-            <small>Zelfde soort sessies in 3m venster</small>
+            <span>Gem. hartslag</span>
+            <strong>${selectedStats.avgHr ? `${Math.round(selectedStats.avgHr)} bpm` : "-"}</strong>
+            <small>${formatHrDelta(selectedStats.avgHr, baselineStats.avgHr)}</small>
+          </div>
+          <div class="z2-progress-card">
+            <span>${baselineMetricLabel}</span>
+            <strong>${metric.baseline}</strong>
+            <small>${baselineStats.count} vergelijkbare sessie(s)</small>
+          </div>
+          <div class="z2-progress-card">
+            <span>Vergelijkingsgroep</span>
+            <strong>${formatDate(start.toISOString().slice(0, 10))} - ${formatDate(end.toISOString().slice(0, 10))}</strong>
+            <small>${metric.helper}</small>
           </div>
         </div>
       ` : `
@@ -6957,7 +6974,7 @@ function setAuthGate(user = state.supabaseUser) {
 function updateSupabaseStatus(message, tone = "idle") {
   state.syncStatus = {
     tone,
-    title: tone === "ready" ? "Cloud actief" : tone === "error" ? "Sync aandacht nodig" : hasSupabaseConfig() ? "Supabase voorbereid" : "Lokale basis actief",
+    title: tone === "ready" && state.supabaseUser ? "Cloud actief" : tone === "error" ? "Sync aandacht nodig" : hasSupabaseConfig() ? "Supabase voorbereid" : "Lokale basis actief",
     text: message || (tone === "ready" ? "Supabase is gekoppeld." : "Controleer de data-tab."),
   };
   renderSyncSidebar();
@@ -7061,6 +7078,7 @@ async function refreshSupabaseUser() {
     if (user) {
       await loadCloudWorkoutsIfUseful();
       refreshStravaStatus();
+      scheduleAutoDailySync();
     }
   } catch (error) {
     state.supabaseUser = null;
@@ -7068,6 +7086,17 @@ async function refreshSupabaseUser() {
     updateAuthStatus(explainAuthError(error), "error");
     updateSupabaseStatus(explainSyncError(error), "error");
   }
+}
+
+function scheduleAutoDailySync() {
+  if (state.autoDailySyncStarted || !state.supabaseUser || !hasSupabaseConfig()) return;
+  const today = new Date().toISOString().slice(0, 10);
+  if (localStorage.getItem("trainiq-last-auto-sync-at") === today) return;
+  state.autoDailySyncStarted = true;
+  window.setTimeout(async () => {
+    localStorage.setItem("trainiq-last-auto-sync-at", today);
+    await handleDailySync({ automatic: true });
+  }, 1200);
 }
 
 async function loadCloudWorkoutsIfUseful() {
@@ -7175,21 +7204,22 @@ async function handleStravaSyncNow(mode = "recent") {
   }
 }
 
-async function handleDailySync() {
+async function handleDailySync(options = {}) {
   try {
     const user = await requireSupabaseUserForSync("both");
     if (!user) return;
 
-    updateStravaStatus("Dagelijkse sync gestart...", "Stap 1/3: Strava workouts en laps ophalen.", "idle");
+    const prefix = options.automatic ? "Automatische sync" : "Dagelijkse sync";
+    updateStravaStatus(`${prefix} gestart...`, "Stap 1/3: Strava workouts en laps ophalen.", "idle");
     const { syncStravaNow, syncIntervalsIcuSummary, loadSupabaseWorkouts } = await loadSupabaseModule();
     const strava = await syncStravaRecent(syncStravaNow);
     if (strava.error) throw strava.error;
 
-    updateStravaStatus("Dagelijkse sync loopt...", "Stap 2/3: Intervals.icu load en summary koppelen.", "idle");
+    updateStravaStatus(`${prefix} loopt...`, "Stap 2/3: Intervals.icu load en summary koppelen.", "idle");
     const intervals = await syncIntervalsIcuSummary({ days: 30, limit: 80 });
     if (intervals.error) throw intervals.error;
 
-    updateStravaStatus("Dagelijkse sync loopt...", "Stap 3/3: bijgewerkte cloud-data laden.", "idle");
+    updateStravaStatus(`${prefix} loopt...`, "Stap 3/3: bijgewerkte cloud-data laden.", "idle");
     const { workouts, error: loadError } = await loadSupabaseWorkouts();
     if (loadError) throw loadError;
 
@@ -7199,14 +7229,14 @@ async function handleDailySync() {
     render();
 
     updateStravaStatus(
-      "Dagelijkse sync klaar.",
+      `${prefix} klaar.`,
       `Strava: ${strava.result?.imported || 0} activiteit(en), ${strava.result?.laps || 0} lap(s). Intervals.icu: ${intervals.result?.updated || 0}/${intervals.result?.matched || 0} workout(s) verrijkt met load/summary.`,
       "ready",
     );
   } catch (error) {
     const detail = explainSyncError(error);
-    updateStravaStatus("Dagelijkse sync mislukt.", detail, "error");
-    updateIntervalsStatus("Dagelijkse sync mislukt.", detail, "error");
+    updateStravaStatus(options.automatic ? "Automatische sync mislukt." : "Dagelijkse sync mislukt.", detail, "error");
+    updateIntervalsStatus(options.automatic ? "Automatische sync mislukt." : "Dagelijkse sync mislukt.", detail, "error");
   }
 }
 
