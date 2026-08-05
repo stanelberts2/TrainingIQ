@@ -16,7 +16,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=daily-sync-1" />
+    <link rel="stylesheet" href="./styles.css?v=analysis-detail-v1" />
   </head>
   <body>
     <section class="auth-screen" id="authScreen" aria-label="Inloggen bij TrainIQ">
@@ -86,8 +86,8 @@
         <section class="sync-card" aria-label="Data status">
           <span class="status-dot" id="syncDot" aria-hidden="true"></span>
           <p>Databasis</p>
-          <strong id="syncTitle">Lokale basis actief</strong>
-          <small id="syncText">Supabase en Strava worden de volgende stap.</small>
+          <strong id="syncTitle">Status laden</strong>
+          <small id="syncText">TrainIQ controleert je cloudverbinding.</small>
         </section>
       </aside>
 
@@ -592,6 +592,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=foundation-sync-v1"></script>
+    <script type="module" src="./app.js?v=analysis-detail-v1"></script>
   </body>
 </html>

@@ -22,10 +22,16 @@ const state = {
   supabaseUser: null,
   passwordRecoveryMode: false,
   cloudLoaded: false,
+  syncStatus: {
+    tone: "idle",
+    title: "Lokale basis actief",
+    text: "Login bij Supabase om cloud-data te gebruiken.",
+  },
   analysisTab: "z2",
   z2AnalysisTab: "run",
   z2PeriodMonths: 3,
   intensityPeriodMonths: 3,
+  workoutPage: 1,
   workoutDetailReturnView: "analysis",
   z2WorkoutPages: {
     run: 1,
@@ -144,6 +150,9 @@ const els = {
   latestWorkout: document.querySelector("#latestWorkout"),
   sportDistribution: document.querySelector("#sportDistribution"),
   dashboardLoad: document.querySelector("#dashboardLoad"),
+  syncDot: document.querySelector("#syncDot"),
+  syncTitle: document.querySelector("#syncTitle"),
+  syncText: document.querySelector("#syncText"),
   workoutForm: document.querySelector("#workoutForm"),
   addIntervalButton: document.querySelector("#addIntervalButton"),
   intervalRows: document.querySelector("#intervalRows"),
@@ -618,25 +627,86 @@ function renderSportDistribution(workouts, totalDuration) {
     .join("");
 }
 
+function renderSyncSidebar() {
+  if (!els.syncTitle || !els.syncText || !els.syncDot) return;
+  let status = state.syncStatus;
+
+  if (!hasSupabaseConfig()) {
+    status = {
+      tone: "idle",
+      title: "Lokale basis actief",
+      text: "Supabase is nog niet geconfigureerd.",
+    };
+  } else if (state.cloudLoaded && state.supabaseUser) {
+    const lastDailySync = localStorage.getItem("trainiq-last-daily-sync");
+    status = {
+      tone: "ready",
+      title: "Cloud actief",
+      text: lastDailySync ? `Ingelogd · laatste sync ${formatDate(lastDailySync)}` : "Ingelogd · Supabase is bron van waarheid.",
+    };
+  } else if (state.supabaseUser) {
+    status = {
+      tone: "ready",
+      title: "Supabase login actief",
+      text: "Cloud-data wordt geladen of staat klaar om op te halen.",
+    };
+  }
+
+  els.syncTitle.textContent = status.title;
+  els.syncText.textContent = status.text;
+  els.syncDot.classList.toggle("is-ready", status.tone === "ready");
+  els.syncDot.classList.toggle("is-error", status.tone === "error");
+}
+
 function renderWorkoutList() {
   const filtered = state.sportFilter === "all"
     ? sortedWorkouts()
     : sortedWorkouts().filter((workout) => matchesWorkoutSportFilter(workout, state.sportFilter));
+  const pageSize = Z2_WORKOUTS_PER_PAGE;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  state.workoutPage = Math.min(Math.max(1, state.workoutPage || 1), totalPages);
+  const startIndex = (state.workoutPage - 1) * pageSize;
+  const pageWorkouts = filtered.slice(startIndex, startIndex + pageSize);
 
   if (!filtered.length) {
     els.workoutList.innerHTML = `<p class="empty-state">Geen workouts voor dit filter.</p>`;
     return;
   }
 
-  els.workoutList.innerHTML = filtered
-    .map((workout) => `
-      <button class="workout-item ${workout.id === state.selectedWorkoutId ? "is-selected" : ""}" type="button" data-workout-id="${workout.id}">
-        <strong>${workout.title}</strong>
-        <span>${formatDate(workout.date)} · ${sportLabels[workout.sport]} · ${workout.workoutType}</span>
-        <span>${formatDuration(numberOrZero(workout.durationMin))} · ${paceForWorkout(workout)} · HR ${validHr(workout.avgHr) || "-"} / ${validHr(workout.maxHr) || "-"} · load ${workout.load || "-"}${workout.intervalFamily ? ` · ${workout.repCount}x ${workout.intervalFamily}` : ""}</span>
-      </button>
-    `)
-    .join("");
+  els.workoutList.innerHTML = `
+    ${renderWorkoutPager(filtered.length, startIndex, pageWorkouts.length, totalPages)}
+    ${pageWorkouts
+      .map((workout) => `
+        <button class="workout-item ${workout.id === state.selectedWorkoutId ? "is-selected" : ""}" type="button" data-workout-id="${escapeHtml(workout.id)}">
+          <strong>${escapeHtml(workout.title)}</strong>
+          <span>${formatDate(workout.date)} · ${sportLabels[workout.sport]} · ${escapeHtml(workout.workoutType || "general")}</span>
+          <span>${formatDuration(numberOrZero(workout.durationMin))} · ${paceForWorkout(workout)} · HR ${validHr(workout.avgHr) || "-"} / ${validHr(workout.maxHr) || "-"}${workout.intervalFamily ? ` · ${workout.repCount}x ${escapeHtml(workout.intervalFamily)}` : ""}</span>
+        </button>
+      `)
+      .join("")}
+    ${renderWorkoutPager(filtered.length, startIndex, pageWorkouts.length, totalPages)}
+  `;
+}
+
+function renderWorkoutPager(total, startIndex, pageCount, totalPages) {
+  if (totalPages <= 1) return "";
+  const maxVisiblePages = 12;
+  const firstPage = Math.max(1, Math.min(state.workoutPage - 5, totalPages - maxVisiblePages + 1));
+  const lastPage = Math.min(totalPages, firstPage + maxVisiblePages - 1);
+  const visiblePages = Array.from({ length: lastPage - firstPage + 1 }, (_, index) => firstPage + index);
+
+  return `
+    <div class="z2-pager workout-pager">
+      <span>${startIndex + 1}-${startIndex + pageCount} van ${total}</span>
+      <div class="z2-page-list" aria-label="Workout pagina's">
+        ${firstPage > 1 ? `<button type="button" data-workout-page="1">1</button><span>...</span>` : ""}
+        ${visiblePages.map((page) => {
+          return `<button type="button" data-workout-page="${page}" class="${page === state.workoutPage ? "is-active" : ""}">${page}</button>`;
+        }).join("")}
+        ${lastPage < totalPages ? `<span>...</span><button type="button" data-workout-page="${totalPages}">${totalPages}</button>` : ""}
+      </div>
+    </div>
+  `;
 }
 
 function matchesWorkoutSportFilter(workout, filter) {
@@ -4503,6 +4573,7 @@ function renderWorkoutDetail() {
 
     ${renderWorkoutDetailMetrics(selected)}
 
+    ${renderWorkoutLongTermComparison(selected, z2Group, family)}
     ${family === "strength" ? "" : renderWorkoutAnalysisModel(selected)}
     ${z2Group ? renderZ2SelectedWorkoutDetail(z2Group, z2Group.workouts, selected) : ""}
     ${shouldShowWorkoutIntervals(selected) ? renderWorkoutDetailIntervals(selected) : ""}
@@ -4562,6 +4633,160 @@ function renderWorkoutDetailMetrics(workout) {
   return `
     <section class="workout-detail-grid">
       ${rows.map(([label, value, meta]) => workoutDetailMetric(label, value, meta || "")).join("")}
+    </section>
+  `;
+}
+
+function renderWorkoutLongTermComparison(workout, z2Group, family) {
+  if (z2Group) return renderZ2WorkoutSixMonthComparison(workout, z2Group);
+  if (family === "vo2max") return renderIntensityWorkoutSixMonthComparison(workout, "vo2");
+  if (family === "threshold") return renderIntensityWorkoutSixMonthComparison(workout, "threshold");
+  return "";
+}
+
+function comparisonWindowSixMonthsBefore(dateValue) {
+  const end = new Date(dateValue);
+  end.setMonth(end.getMonth() - 6);
+  end.setDate(end.getDate() + 1);
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - 3);
+  return { start, end };
+}
+
+function renderZ2WorkoutSixMonthComparison(workout, group) {
+  const selectedStats = z2StatsForGroupWorkouts([workout], group.key);
+  const { start, end } = comparisonWindowSixMonthsBefore(workout.date);
+  const baselineWorkouts = group.workouts.filter((candidate) => {
+    if (candidate.id === workout.id) return false;
+    const date = new Date(candidate.date);
+    return date >= start && date < end;
+  });
+  const baselineStats = z2StatsForGroupWorkouts(baselineWorkouts, group.key);
+  const metric = z2ComparisonMetricForGroup(group.key, selectedStats, baselineStats);
+
+  return `
+    <section class="workout-detail-section">
+      <div class="workout-detail-section-header">
+        <div>
+          <strong>Progressiecheck</strong>
+          <span>${escapeHtml(group.label)} · deze workout versus dezelfde trainingsgroep rond zes maanden geleden.</span>
+        </div>
+      </div>
+      ${baselineStats.count ? `
+        <div class="z2-detail-grid">
+          <div class="z2-progress-card">
+            <span>Deze workout</span>
+            <strong>${metric.current}</strong>
+            <small>${selectedStats.avgHr ? `${Math.round(selectedStats.avgHr)} bpm` : "HR -"}</small>
+          </div>
+          <div class="z2-progress-card">
+            <span>6 maanden terug</span>
+            <strong>${metric.baseline}</strong>
+            <small>${baselineStats.avgHr ? `${Math.round(baselineStats.avgHr)} bpm` : "HR -"} · ${baselineStats.count} sessie(s)</small>
+          </div>
+          <div class="z2-progress-card ${metric.tone}">
+            <span>Tempo/vermogen verschil</span>
+            <strong>${metric.delta}</strong>
+            <small>${metric.helper}</small>
+          </div>
+          <div class="z2-progress-card">
+            <span>Hartslag verschil</span>
+            <strong>${formatHrDelta(selectedStats.avgHr, baselineStats.avgHr)}</strong>
+            <small>Zelfde soort sessies in 3m venster</small>
+          </div>
+        </div>
+      ` : `
+        <p class="empty-state">Nog geen vergelijkbare ${escapeHtml(group.label)} sessies gevonden in het 3-maanden venster rond zes maanden geleden.</p>
+      `}
+    </section>
+  `;
+}
+
+function z2ComparisonMetricForGroup(groupKey, currentStats, baselineStats) {
+  if (groupKey === "bike") {
+    const delta = currentStats.avgWatts && baselineStats.avgWatts ? currentStats.avgWatts - baselineStats.avgWatts : 0;
+    return {
+      current: formatWatts(currentStats.avgWatts),
+      baseline: formatWatts(baselineStats.avgWatts),
+      delta: formatWattsDelta(currentStats.avgWatts, baselineStats.avgWatts),
+      helper: delta >= 0 ? "Hoger wattage bij vergelijkbare Z2-prikkel." : "Lager wattage dan de vergelijkingsperiode.",
+      tone: delta >= Z2_ANALYSIS_RULES.bikeProgressWatts ? "is-good" : "",
+    };
+  }
+
+  if (groupKey === "run") {
+    const delta = currentStats.paceSecPerKm && baselineStats.paceSecPerKm ? currentStats.paceSecPerKm - baselineStats.paceSecPerKm : 0;
+    return {
+      current: formatPacePerKm(currentStats.paceSecPerKm),
+      baseline: formatPacePerKm(baselineStats.paceSecPerKm),
+      delta: formatPaceDelta(currentStats.paceSecPerKm, baselineStats.paceSecPerKm),
+      helper: delta <= 0 ? "Sneller dan de vergelijkingsperiode." : "Langzamer dan de vergelijkingsperiode.",
+      tone: delta <= -Z2_ANALYSIS_RULES.runProgressPaceSec ? "is-good" : delta >= Z2_ANALYSIS_RULES.runProgressPaceSec ? "is-warning" : "",
+    };
+  }
+
+  const delta = currentStats.pace500Sec && baselineStats.pace500Sec ? currentStats.pace500Sec - baselineStats.pace500Sec : 0;
+  return {
+    current: formatPace500(currentStats.pace500Sec),
+    baseline: formatPace500(baselineStats.pace500Sec),
+    delta: formatErg500Delta(currentStats.pace500Sec, baselineStats.pace500Sec),
+    helper: delta <= 0 ? "Sneller per 500m dan de vergelijkingsperiode." : "Langzamer per 500m dan de vergelijkingsperiode.",
+    tone: delta <= -Z2_ANALYSIS_RULES.ergProgressPace500Sec ? "is-good" : delta >= Z2_ANALYSIS_RULES.ergProgressPace500Sec ? "is-warning" : "",
+  };
+}
+
+function renderIntensityWorkoutSixMonthComparison(workout, kind) {
+  const currentSession = {
+    workout,
+    kind,
+    profileKey: intensityProfileKey(kind, workout),
+    metrics: kind === "vo2" ? vo2SessionMetrics(workout) : thresholdSessionMetrics(workout),
+  };
+  const currentStats = intensityStats([currentSession], kind);
+  const { start, end } = comparisonWindowSixMonthsBefore(workout.date);
+  const baselineSessions = intensitySessions(kind).filter((session) => {
+    if (session.workout.id === workout.id) return false;
+    const date = new Date(session.workout.date);
+    return date >= start && date < end && session.profileKey === currentSession.profileKey;
+  });
+  const baselineStats = intensityStats(baselineSessions, kind);
+  const paceDelta = currentStats.avgPace && baselineStats.avgPace ? currentStats.avgPace - baselineStats.avgPace : 0;
+  const config = INTENSITY_ANALYSIS_RULES[kind];
+
+  return `
+    <section class="workout-detail-section">
+      <div class="workout-detail-section-header">
+        <div>
+          <strong>Werkblok progressiecheck</strong>
+          <span>${config.label} · alleen werkblokken, zonder warming-up, rust of cooling-down.</span>
+        </div>
+      </div>
+      ${baselineStats.count ? `
+        <div class="z2-detail-grid">
+          <div class="z2-progress-card">
+            <span>Deze workout</span>
+            <strong>${formatPacePerKm(currentStats.avgPace)}</strong>
+            <small>${currentStats.usableRows} werkblok(ken) · ${formatDuration(Math.round(currentStats.durationMin))}</small>
+          </div>
+          <div class="z2-progress-card">
+            <span>6 maanden terug</span>
+            <strong>${formatPacePerKm(baselineStats.avgPace)}</strong>
+            <small>${baselineStats.usableRows} werkblok(ken) · ${baselineStats.count} sessie(s)</small>
+          </div>
+          <div class="z2-progress-card ${paceDelta <= -config.progressPaceSec ? "is-good" : paceDelta >= config.progressPaceSec ? "is-warning" : ""}">
+            <span>Pace verschil</span>
+            <strong>${formatSignedPace(paceDelta)}</strong>
+            <small>${paceDelta <= 0 ? "Sneller op werkblokken." : "Langzamer op werkblokken."}</small>
+          </div>
+          <div class="z2-progress-card">
+            <span>HR verschil</span>
+            <strong>${formatHrDelta(currentStats.avgHr, baselineStats.avgHr)}</strong>
+            <small>HR is ondersteunend; pace blijft leidend voor ${config.label}.</small>
+          </div>
+        </div>
+      ` : `
+        <p class="empty-state">Nog geen vergelijkbare ${config.label}-werkblokken gevonden in het 3-maanden venster rond zes maanden geleden.</p>
+      `}
     </section>
   `;
 }
@@ -6730,6 +6955,12 @@ function setAuthGate(user = state.supabaseUser) {
 }
 
 function updateSupabaseStatus(message, tone = "idle") {
+  state.syncStatus = {
+    tone,
+    title: tone === "ready" ? "Cloud actief" : tone === "error" ? "Sync aandacht nodig" : hasSupabaseConfig() ? "Supabase voorbereid" : "Lokale basis actief",
+    text: message || (tone === "ready" ? "Supabase is gekoppeld." : "Controleer de data-tab."),
+  };
+  renderSyncSidebar();
   els.supabaseStatus.innerHTML = `<div class="summary-card ${tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(message)}</strong><span>${escapeHtml(state.supabaseUser?.email || "Nog geen actieve Supabase-sessie.")}</span></div>`;
   els.supabaseStatusBadge.textContent = tone === "ready" ? "Klaar" : tone === "error" ? "Actie nodig" : "Niet gekoppeld";
   els.supabaseStatusBadge.classList.toggle("is-ready", tone === "ready");
@@ -8158,6 +8389,7 @@ function applyCloudWorkouts(workouts, options = {}) {
   state.workouts = cleanCloudWorkouts;
   saveWorkouts(state.workouts);
   state.selectedWorkoutId = state.workouts[0]?.id || null;
+  state.workoutPage = 1;
 }
 
 async function persistAutoFilledBikeHr() {
@@ -8182,6 +8414,7 @@ async function persistAutoFilledBikeHr() {
 }
 
 function render() {
+  renderSyncSidebar();
   renderDashboard();
   renderWorkoutList();
   renderCalendar();
@@ -9154,10 +9387,18 @@ function bindEvents() {
 
   els.sportFilter.addEventListener("change", (event) => {
     state.sportFilter = event.target.value;
+    state.workoutPage = 1;
     renderWorkoutList();
   });
 
   els.workoutList.addEventListener("click", (event) => {
+    const pageButton = event.target.closest("[data-workout-page]");
+    if (pageButton) {
+      state.workoutPage = Number(pageButton.dataset.workoutPage) || 1;
+      renderWorkoutList();
+      return;
+    }
+
     const item = event.target.closest("[data-workout-id]");
     if (!item) return;
 

@@ -220,6 +220,16 @@ label {
   box-shadow: 0 0 0 5px rgba(200, 138, 29, 0.14);
 }
 
+.status-dot.is-ready {
+  background: var(--green);
+  box-shadow: 0 0 0 5px rgba(30, 159, 117, 0.14);
+}
+
+.status-dot.is-error {
+  background: var(--rose);
+  box-shadow: 0 0 0 5px rgba(216, 86, 104, 0.14);
+}
+
 .main {
   min-width: 0;
   padding: 28px;
@@ -1461,6 +1471,11 @@ textarea {
   background: #f0faf4;
 }
 
+.z2-progress-card.is-warning {
+  border-color: #f2d08b;
+  background: #fff9eb;
+}
+
 .z2-progress-card.is-neutral {
   background: #f7f9fb;
 }
@@ -2081,6 +2096,10 @@ textarea {
   align-items: center;
 }
 
+.workout-pager {
+  padding: 8px 0;
+}
+
 .z2-pager span {
   color: var(--muted);
   font-weight: 800;
@@ -2091,6 +2110,13 @@ textarea {
   flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.z2-page-list > span {
+  color: var(--muted);
+  font-weight: 850;
+  padding: 0 2px;
 }
 
 .z2-page-list button {
