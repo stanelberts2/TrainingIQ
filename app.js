@@ -6414,6 +6414,13 @@ async function refreshSupabaseUser() {
     const { user, error } = await getCurrentUser();
     if (error) throw error;
     state.supabaseUser = user;
+    if (state.passwordRecoveryMode) {
+      setAuthGate(null);
+      if (els.authResetPanel) els.authResetPanel.hidden = false;
+      updateAuthStatus("Kies een nieuw wachtwoord om je account te herstellen.", "idle");
+      updateSupabaseStatus("Wachtwoordherstel actief.", user ? "ready" : "idle");
+      return;
+    }
     setAuthGate(state.passwordRecoveryMode ? null : user);
     updateAuthStatus(
       state.passwordRecoveryMode
@@ -7670,7 +7677,15 @@ async function handleAuthUpdatePassword() {
 
 function detectPasswordRecovery() {
   const combined = `${window.location.search} ${window.location.hash}`;
-  if (!/(type=recovery|type%3Drecovery|access_token=)/.test(combined)) return;
+  const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = params.get("type") || hashParams.get("type") || "";
+  const hasRecoveryToken = type === "recovery"
+    || combined.includes("type=recovery")
+    || combined.includes("type%3Drecovery")
+    || params.has("code")
+    || hashParams.has("access_token");
+  if (!hasRecoveryToken) return;
   state.passwordRecoveryMode = true;
   if (els.authResetPanel) els.authResetPanel.hidden = false;
   setAuthGate(null);
