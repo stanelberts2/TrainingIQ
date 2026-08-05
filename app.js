@@ -4582,18 +4582,35 @@ function renderWorkoutDetail() {
       </div>
     </section>
 
-    ${renderSourceDetection(selected)}
-
-    ${renderWorkoutDetailDataCheckControls(selected)}
+    ${shouldShowSourceDetection(selected) ? renderSourceDetection(selected) : ""}
 
     ${renderWorkoutDetailMetrics(selected)}
 
     ${renderWorkoutLongTermComparison(selected, z2Group, family)}
     ${family === "strength" ? "" : renderWorkoutAnalysisModel(selected)}
     ${z2Group ? renderZ2SelectedWorkoutDetail(z2Group, z2Group.workouts, selected) : ""}
-    ${shouldShowWorkoutIntervals(selected) ? renderWorkoutDetailIntervals(selected) : ""}
+    ${renderWorkoutDetailReviewPanel(selected)}
     ${shouldShowWorkoutSegments(selected) ? renderWorkoutDetailSegments(selected) : ""}
     ${selected.notes ? `<section class="workout-detail-note"><strong>Notitie</strong><p>${escapeHtml(selected.notes)}</p></section>` : ""}
+  `;
+}
+
+function renderWorkoutDetailReviewPanel(workout) {
+  const intervals = shouldShowWorkoutIntervals(workout) ? renderWorkoutDetailIntervalsContent(workout) : "";
+  if (!intervals) return "";
+
+  return `
+    <details class="workout-detail-section workout-detail-review-panel">
+      <summary>
+        <span>
+          <strong>Datacheck en intervalblokken</strong>
+          <small>Open alleen als je HR, analyse-type, laps of splitdata wilt aanpassen.</small>
+        </span>
+        <b>Openen</b>
+      </summary>
+      ${renderWorkoutDetailDataCheckControls(workout)}
+      ${intervals}
+    </details>
   `;
 }
 
@@ -4654,9 +4671,34 @@ function renderWorkoutDetailMetrics(workout) {
 
 function renderWorkoutLongTermComparison(workout, z2Group, family) {
   if (z2Group) return renderZ2WorkoutSixMonthComparison(workout, z2Group);
+  const easyRunGroup = getWorkoutDetailEasyRunGroup(workout, family);
+  if (easyRunGroup) return renderZ2WorkoutSixMonthComparison(workout, easyRunGroup);
   if (family === "vo2max") return renderIntensityWorkoutSixMonthComparison(workout, "vo2");
   if (family === "threshold") return renderIntensityWorkoutSixMonthComparison(workout, "threshold");
   return "";
+}
+
+function getWorkoutDetailEasyRunGroup(workout, family) {
+  if (!isComparableEasyRunWorkout(workout, family)) return null;
+  return {
+    key: "run",
+    label: "Rustige hardloopruns",
+    workouts: sortedWorkouts().filter((candidate) => isComparableEasyRunWorkout(candidate, workoutAnalysisFamily(candidate))),
+  };
+}
+
+function isComparableEasyRunWorkout(workout, family = workoutAnalysisFamily(workout)) {
+  if (!workout || workout.sport !== "running") return false;
+  if (vo2ProfileForWorkout(workout) || thresholdProfileForWorkout(workout) || isTrueHyroxWorkout(workout)) return false;
+  if (["z2", "recovery"].includes(family)) return true;
+
+  const haystack = [
+    workout.title,
+    workout.workoutType,
+    workout.rawPayload?.reviewContext?.trainingGoal,
+    workout.rawPayload?.reviewContext?.bulkCategory,
+  ].join(" ").toLowerCase();
+  return /(easy|z2|zone 2|recovery|herstel|shakeout)/.test(haystack);
 }
 
 function comparisonWindowSixMonthsBefore(dateValue) {
@@ -4857,6 +4899,10 @@ function renderSourceDetection(workout) {
   `;
 }
 
+function shouldShowSourceDetection(workout) {
+  return isCardioWorkoutImport(workout);
+}
+
 function sourceActivityTypeText(workout) {
   const activity = workout.rawPayload?.strava_activity || workout.rawPayload?.raw?.strava_activity || {};
   const sportType = activity.sport_type || activity.type || activity.workout_type || "";
@@ -4895,23 +4941,21 @@ function workoutDetailMetric(label, value, meta) {
 function renderWorkoutAnalysisModel(workout) {
   const metrics = analysisMetricsForWorkout(workout);
   const familyDetail = renderFamilySpecificAnalysis(metrics);
+  const rpeEditor = ["strength", "hyrox"].includes(metrics.family) ? renderWorkoutRpeEditor(workout) : "";
+  const qualityDetail = renderAnalysisQualityDetail(metrics.quality);
+
+  if (!familyDetail && !rpeEditor && !qualityDetail) return "";
 
   return `
     <section class="workout-detail-section">
       <div class="workout-detail-section-header">
         <div>
-          <strong>Analysemodel</strong>
-          <span>Transparante proxy op basis van je huidige data. Geen medische of blessurediagnose.</span>
+          <strong>Analyse-aandacht</strong>
+          <span>Alleen zichtbaar als er iets te controleren is of als deze workout een specifiek analysemodel heeft.</span>
         </div>
       </div>
-      <div class="z2-quality-grid analysis-model-grid">
-        <div><span>Prikkel</span><strong>${escapeHtml(metrics.familyLabel)}</strong><small>${escapeHtml(modelSourceText(metrics.family))}</small></div>
-        <div><span>Load</span><strong>${metrics.load || "-"}</strong><small>TrainIQ load score</small></div>
-        <div><span>Analysekwaliteit</span><strong>${escapeHtml(metrics.quality.label)}</strong><small>${escapeHtml(metrics.confidence)} betrouwbaarheid</small></div>
-        <div><span>Vergelijking</span><strong>${comparableWorkoutCount(workout, metrics.family)}</strong><small>Zelfde analyse-familie</small></div>
-      </div>
-      ${["strength", "hyrox"].includes(metrics.family) ? renderWorkoutRpeEditor(workout) : ""}
-      ${renderAnalysisQualityDetail(metrics.quality)}
+      ${rpeEditor}
+      ${qualityDetail}
       ${familyDetail}
     </section>
   `;
@@ -4937,7 +4981,7 @@ function renderAnalysisQualityDetail(quality) {
   const messages = [...(quality.reasons || []), ...(quality.missing || [])];
   const blockIssues = (quality.blocks || []).filter((block) => block.status !== "bruikbaar");
   if (!messages.length && !blockIssues.length) {
-    return `<div class="analysis-model-note is-good"><strong>Bruikbaar</strong><span>Deze training heeft genoeg basisdata voor het huidige analysemodel.</span></div>`;
+    return "";
   }
 
   return `
@@ -4972,13 +5016,7 @@ function renderFamilySpecificAnalysis(metrics) {
       </div>
     `;
   }
-
-  return `
-    <div class="analysis-model-note">
-      <strong>Basis load model</strong>
-      <span>Deze training telt mee in de loadgrafiek. Specifieke kwaliteitsanalyse verschijnt zodra hij Z2, VO2max, threshold of HYROX-structuur heeft.</span>
-    </div>
-  `;
+  return "";
 }
 
 function modelSourceText(family) {
@@ -4995,39 +5033,48 @@ function comparableWorkoutCount(workout, family) {
 }
 
 function renderWorkoutDetailIntervals(workout) {
-  const intervals = workout.intervals || [];
-  if (!intervals.length) {
+  const content = renderWorkoutDetailIntervalsContent(workout);
+  if (!content) {
     return `<section class="workout-detail-section"><strong>Intervalblokken</strong><p class="empty-state">Geen intervalblokken opgeslagen voor deze workout.</p></section>`;
   }
+
+  return `
+    <section class="workout-detail-section">
+      ${content}
+    </section>
+  `;
+}
+
+function renderWorkoutDetailIntervalsContent(workout) {
+  const intervals = workout.intervals || [];
+  if (!intervals.length) return "";
   const outputHeader = workout.sport === "running" || intervals.some((interval) => interval.exerciseType === "run")
     ? "Pace / km"
     : "ERG tempo";
 
   return `
-    <section class="workout-detail-section">
-      <div class="workout-detail-section-header">
-        <div>
-          <strong>Intervalblokken</strong>
-          <span>Label Garmin/Strava cardio-laps als SkiErg, RowErg, BikeErg, warming-up, herstel of cooling-down.</span>
-        </div>
+    <div class="workout-detail-section-header">
+      <div>
+        <strong>Intervalblokken</strong>
+        <span>Label Garmin/Strava cardio-laps als SkiErg, RowErg, BikeErg, warming-up, herstel of cooling-down.</span>
       </div>
-      ${renderWorkoutDetailBulkTools(workout)}
-      <div class="workout-detail-table">
-        <div class="workout-detail-row workout-detail-row-edit workout-detail-head">
-          <span>Blok</span>
-          <span>Onderdeel</span>
-          <span>Rol</span>
-          <span>Doel</span>
-          <span>Tijd</span>
-          <span>Gem HR</span>
-          <span>Max HR</span>
-          <span>${outputHeader}</span>
-          <span>Afstand</span>
-          <span>Actie</span>
-        </div>
-        ${intervals.map((interval) => renderWorkoutDetailIntervalRow(interval)).join("")}
+    </div>
+    ${renderWorkoutDetailBulkTools(workout)}
+    <div class="workout-detail-table">
+      <div class="workout-detail-row workout-detail-row-edit workout-detail-head">
+        <span>Blok</span>
+        <span>Onderdeel</span>
+        <span>Rol</span>
+        <span>Doel</span>
+        <span>Tijd</span>
+        <span>Gem HR</span>
+        <span>Max HR</span>
+        <span>${outputHeader}</span>
+        <span>Afstand</span>
+        <span>Actie</span>
       </div>
-    </section>
+      ${intervals.map((interval) => renderWorkoutDetailIntervalRow(interval)).join("")}
+    </div>
   `;
 }
 
@@ -7094,7 +7141,6 @@ function scheduleAutoDailySync() {
   if (localStorage.getItem("trainiq-last-auto-sync-at") === today) return;
   state.autoDailySyncStarted = true;
   window.setTimeout(async () => {
-    localStorage.setItem("trainiq-last-auto-sync-at", today);
     await handleDailySync({ automatic: true });
   }, 1200);
 }
@@ -7226,6 +7272,7 @@ async function handleDailySync(options = {}) {
     applyCloudWorkouts(workouts, { allowEmptyReplace: false });
     persistAutoFilledBikeHr();
     localStorage.setItem("trainiq-last-daily-sync", new Date().toISOString().slice(0, 10));
+    if (options.automatic) localStorage.setItem("trainiq-last-auto-sync-at", new Date().toISOString().slice(0, 10));
     render();
 
     updateStravaStatus(

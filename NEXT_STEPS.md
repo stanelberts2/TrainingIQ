@@ -61,3 +61,10 @@ Na deze stap is de Strava-datakwaliteit gecontroleerd:
 - Geen grote `workouts.id` -> UUID migratie zonder ontwerp en testplan.
 - Geen tokenencryptie-refactor zonder gecontroleerde secrets/key-strategie.
 - Geen AI/readiness features voordat streams, zones en load-model betrouwbaar zijn.
+
+## Long List
+
+- Load-model opnieuw beoordelen: betrouwbaarder maken met Intervals.icu/Garmin-load waar beschikbaar en TrainIQ-proxy alleen als fallback.
+- Prikkelbepaling aanscherpen: beter bepalen of een training Z2, threshold, VO2max, HYROX, herstel of kracht is.
+- Vergelijkingsmodel aanscherpen: per trainingssoort bepalen welke sessies echt vergelijkbaar zijn en welke uitgesloten moeten worden.
+- Mobiele/iPad layout verbeteren zodra de analyseflow inhoudelijk goed staat.
