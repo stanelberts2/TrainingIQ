@@ -2,10 +2,15 @@
   "name": "TrainIQ Performance",
   "short_name": "TrainIQ",
   "description": "Workout analyse, planning en PR dashboard voor hardlopen, Hyrox, kracht en fietsen.",
+  "id": "./",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#f5f6f8",
   "theme_color": "#101418",
+  "categories": ["health", "fitness", "sports"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "./icon.svg",

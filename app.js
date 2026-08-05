@@ -21,6 +21,7 @@ const state = {
   selectedDate: null,
   supabaseUser: null,
   passwordRecoveryMode: false,
+  cloudLoaded: false,
   analysisTab: "z2",
   z2AnalysisTab: "run",
   z2PeriodMonths: 3,
@@ -1112,7 +1113,7 @@ function renderIntensityDataQualityPanel(quality, kind) {
       <div>
         <span>Datakwaliteit analyse</span>
         <strong>${quality.usablePct}% bruikbaar</strong>
-        <small>${kind === "vo2" ? "VO2 vraagt vooral werkblok-pace, tijd en afstand." : "Threshold vraagt werkblok-pace, tijd, afstand en stabiliteit."}</small>
+        <small>${escapeHtml(quality.summary)}</small>
       </div>
       <div class="z2-quality-grid">
         <div><strong>${quality.usable}</strong><span>meegeteld</span></div>
@@ -1128,13 +1129,33 @@ function intensityDataQualitySummary(kind, sessions, incomplete) {
   const unknown = sessions.filter((session) => (session.workout.intervals || []).some((interval) => interval.rawPayload?.metricUnavailable)).length;
   const usable = sessions.filter(intensitySessionIsUsable).length;
   const total = sessions.length + incomplete.length;
+  const reasons = uniqueValues(incomplete
+    .map((session) => intensityIncompleteReason(session, kind))
+    .filter(Boolean))
+    .slice(0, 3);
   return {
     total,
     usable,
     incomplete: incomplete.length,
     unknown,
     usablePct: total ? Math.round((usable / total) * 100) : 0,
+    summary: reasons.length ? `Nog checken: ${reasons.join(", ")}.` : "Alle gevonden sessies hebben bruikbare werkblokdata.",
   };
+}
+
+function intensityIncompleteReason(session, kind) {
+  const rows = session.metrics?.rows || [];
+  if (!rows.length) return "geen werkblokken";
+  const missingDistance = rows.filter((row) => !numberOrZero(row.distanceMeters)).length;
+  const missingDuration = rows.filter((row) => !numberOrZero(row.durationSeconds)).length;
+  const missingPace = rows.filter((row) => !row.paceSecPerKm).length;
+  if (missingPace && missingDistance) return "pace/afstand ontbreekt";
+  if (missingDuration) return "tijd ontbreekt";
+  if (kind === "threshold") {
+    const workSeconds = rows.reduce((sum, row) => sum + numberOrZero(row.durationSeconds), 0);
+    if (workSeconds < 180) return "te weinig threshold-werktijd";
+  }
+  return "werkbloklabel controleren";
 }
 
 function renderIntensityVisualSummary(kind, trendData, currentStats, yearBackStats, yearBackText) {
@@ -1369,11 +1390,17 @@ function intensityIncompleteSessions(kind) {
 }
 
 function intensitySessionIsUsable(session) {
-  return Boolean(
-    session.metrics.reps
-    && session.metrics.avgPace
-    && numberOrZero(session.metrics.durationSeconds)
-  );
+  if (!session?.metrics) return false;
+  const rows = session.metrics.rows || [];
+  const usableRows = rows.filter((row) => (
+    row.paceSecPerKm
+    && numberOrZero(row.durationSeconds)
+    && numberOrZero(row.distanceMeters)
+  ));
+  if (!usableRows.length) return false;
+  if (session.kind === "vo2") return usableRows.length >= 1;
+  if (session.kind === "threshold") return usableRows.reduce((sum, row) => sum + numberOrZero(row.durationSeconds), 0) >= 180;
+  return Boolean(session.metrics.avgPace && numberOrZero(session.metrics.durationSeconds));
 }
 
 function comparableIntensitySessions(target, sessions) {
@@ -1390,18 +1417,24 @@ function intensityProfileKey(kind, workout) {
 
 function isIntensityWorkInterval(interval, kind = null) {
   if (!interval || isTransitionInterval(interval)) return false;
-  if (["warmup", "cooldown", "recovery", "transition"].includes(interval.lapRole || "work")) return false;
+  const role = String(interval.lapRole || "work").toLowerCase();
+  if (["warmup", "cooldown", "recovery", "transition", "rest"].includes(role)) return false;
   if (!kind) return true;
 
   const goal = String(interval.effortGoal || "").toLowerCase();
   const pace = secondsPerKmForInterval(interval);
+  const duration = numberOrZero(interval.durationSeconds);
+  const distance = numberOrZero(interval.distanceMeters);
+  const hasRunMetric = pace && (duration || distance);
   if (kind === "vo2") {
     if (goal === "vo2max") return true;
-    return pace >= 225 && pace <= 248;
+    if (role === "work" && hasRunMetric && pace >= 225 && pace <= 248) return true;
+    return false;
   }
   if (kind === "threshold") {
     if (goal === "threshold") return true;
-    return pace >= 250 && pace <= 285;
+    if (role === "work" && hasRunMetric && pace >= 250 && pace <= 285) return true;
+    return false;
   }
   return true;
 }
@@ -6662,9 +6695,22 @@ function renderSupabaseConfig() {
 
 function updateAuthStatus(message, tone = "idle") {
   if (!els.authStatus) return;
+  const helper = tone === "ready"
+    ? "Je sessie is actief."
+    : "Gebruik hetzelfde e-mailadres en wachtwoord op laptop, iPad en telefoon.";
   els.authStatus.innerHTML = message
-    ? `<div class="summary-card ${tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(message)}</strong><span>${tone === "ready" ? "Je sessie is actief." : "Gebruik je Supabase-account voor toegang."}</span></div>`
+    ? `<div class="summary-card ${tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(message)}</strong><span>${helper}</span></div>`
     : "";
+}
+
+function explainAuthError(error) {
+  const message = String(error?.message || error || "Onbekende loginfout.");
+  if (/invalid login credentials/i.test(message)) return "E-mail of wachtwoord klopt niet.";
+  if (/email not confirmed/i.test(message)) return "Bevestig eerst je e-mailadres via de mail van Supabase.";
+  if (/password.*weak|at least 6|at least 8/i.test(message)) return "Gebruik een sterker wachtwoord van minimaal 8 tekens.";
+  if (/rate limit/i.test(message)) return "Te veel pogingen. Wacht even en probeer daarna opnieuw.";
+  if (/failed to fetch|networkerror|load failed/i.test(message)) return "Geen verbinding met Supabase. Controleer je internet en Supabase-configuratie.";
+  return message;
 }
 
 function setAuthGate(user = state.supabaseUser) {
@@ -6684,14 +6730,14 @@ function setAuthGate(user = state.supabaseUser) {
 }
 
 function updateSupabaseStatus(message, tone = "idle") {
-  els.supabaseStatus.innerHTML = `<div class="summary-card"><strong>${message}</strong><span>${state.supabaseUser?.email || "Nog geen actieve Supabase-sessie."}</span></div>`;
+  els.supabaseStatus.innerHTML = `<div class="summary-card ${tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(message)}</strong><span>${escapeHtml(state.supabaseUser?.email || "Nog geen actieve Supabase-sessie.")}</span></div>`;
   els.supabaseStatusBadge.textContent = tone === "ready" ? "Klaar" : tone === "error" ? "Actie nodig" : "Niet gekoppeld";
   els.supabaseStatusBadge.classList.toggle("is-ready", tone === "ready");
   els.supabaseStatusBadge.classList.toggle("is-error", tone === "error");
 }
 
 function updateStravaStatus(message, detail = "Koppel eerst Supabase en daarna Strava.", tone = "idle") {
-  els.stravaStatus.innerHTML = `<div class="summary-card"><strong>${message}</strong><span>${detail}</span></div>`;
+  els.stravaStatus.innerHTML = `<div class="summary-card ${tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(message)}</strong><span>${escapeHtml(detail)}</span></div>`;
   els.stravaStatusBadge.textContent = tone === "ready" ? "Gekoppeld" : tone === "error" ? "Actie nodig" : "Niet gekoppeld";
   els.stravaStatusBadge.classList.toggle("is-ready", tone === "ready");
   els.stravaStatusBadge.classList.toggle("is-error", tone === "error");
@@ -6699,7 +6745,7 @@ function updateStravaStatus(message, detail = "Koppel eerst Supabase en daarna S
 
 function updateIntervalsStatus(message, detail = "", tone = "idle") {
   if (!els.intervalsStatus) return;
-  els.intervalsStatus.innerHTML = `<div class="summary-card"><strong>${message}</strong><span>${detail}</span></div>`;
+  els.intervalsStatus.innerHTML = `<div class="summary-card ${tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(message)}</strong><span>${escapeHtml(detail)}</span></div>`;
   if (!els.intervalsStatusBadge) return;
   els.intervalsStatusBadge.textContent = tone === "ready" ? "Werkend" : tone === "error" ? "Actie nodig" : "Niet getest";
   els.intervalsStatusBadge.classList.toggle("is-ready", tone === "ready");
@@ -6716,6 +6762,12 @@ function explainSyncError(error) {
   const message = String(error?.message || error || "Onbekende fout.");
   if (/failed to fetch|networkerror|load failed/i.test(message)) {
     return "Geen verbinding met de Supabase Edge Function. Controleer of je bent ingelogd, of de Supabase URL/key kloppen en of de Edge Function gedeployed is.";
+  }
+  if (/rate limit/i.test(message)) {
+    return "Rate limit bereikt. Wacht even en probeer daarna een kleinere batch of de dagelijkse sync.";
+  }
+  if (/jwt|auth|session|login|unauthorized/i.test(message)) {
+    return "Je sessie is verlopen of mist rechten. Log opnieuw in en probeer daarna opnieuw.";
   }
   return message;
 }
@@ -6775,12 +6827,31 @@ async function refreshSupabaseUser() {
       user ? "Ingelogd bij Supabase." : "Config opgeslagen. Login om te syncen.",
       user ? "ready" : "idle",
     );
-    if (user) refreshStravaStatus();
+    if (user) {
+      await loadCloudWorkoutsIfUseful();
+      refreshStravaStatus();
+    }
   } catch (error) {
     state.supabaseUser = null;
     setAuthGate(null);
-    updateAuthStatus(error.message, "error");
-    updateSupabaseStatus(error.message, "error");
+    updateAuthStatus(explainAuthError(error), "error");
+    updateSupabaseStatus(explainSyncError(error), "error");
+  }
+}
+
+async function loadCloudWorkoutsIfUseful() {
+  if (state.cloudLoaded || !hasSupabaseConfig() || !state.supabaseUser) return;
+  try {
+    updateSupabaseStatus("Cloud-data wordt geladen...", "idle");
+    const { loadSupabaseWorkouts } = await loadSupabaseModule();
+    const { workouts, error } = await loadSupabaseWorkouts();
+    if (error) throw error;
+    applyCloudWorkouts(workouts, { allowEmptyReplace: false });
+    state.cloudLoaded = true;
+    render();
+    updateSupabaseStatus(`${state.workouts.length} workout(s) actief uit ${workouts.length ? "Supabase" : "lokale cache"}.`, "ready");
+  } catch (error) {
+    updateSupabaseStatus(`Cloud laden lukte niet. Lokale cache blijft actief. ${explainSyncError(error)}`, "error");
   }
 }
 
@@ -6858,11 +6929,8 @@ async function handleStravaSyncNow(mode = "recent") {
     const { workouts, error: loadError } = await loadSupabaseWorkouts();
     if (loadError) throw loadError;
 
-    const cleanCloudWorkouts = normalizeAppWorkouts(workouts);
-    state.workouts = cleanCloudWorkouts;
-    saveWorkouts(state.workouts);
+    applyCloudWorkouts(workouts, { allowEmptyReplace: false });
     persistAutoFilledBikeHr();
-    state.selectedWorkoutId = state.workouts[0]?.id || null;
     render();
     updateStravaStatus(
       isHistory ? "Strava historie-sync klaar." : "Strava sync klaar.",
@@ -6894,10 +6962,8 @@ async function handleDailySync() {
     const { workouts, error: loadError } = await loadSupabaseWorkouts();
     if (loadError) throw loadError;
 
-    state.workouts = normalizeAppWorkouts(workouts);
-    saveWorkouts(state.workouts);
+    applyCloudWorkouts(workouts, { allowEmptyReplace: false });
     persistAutoFilledBikeHr();
-    state.selectedWorkoutId = state.workouts[0]?.id || null;
     localStorage.setItem("trainiq-last-daily-sync", new Date().toISOString().slice(0, 10));
     render();
 
@@ -7877,7 +7943,7 @@ async function handleSupabaseLogin() {
     if (error) throw error;
     updateSupabaseStatus("Magic link verstuurd. Check je e-mail en open de link.", "ready");
   } catch (error) {
-    updateSupabaseStatus(error.message, "error");
+    updateSupabaseStatus(explainAuthError(error), "error");
   }
 }
 
@@ -7901,6 +7967,7 @@ async function handleAuthPasswordLogin(event) {
     const { user, error } = await signInWithPassword(email, password);
     if (error) throw error;
     state.supabaseUser = user;
+    state.cloudLoaded = false;
     state.passwordRecoveryMode = false;
     setAuthGate(user);
     updateAuthStatus(`Ingelogd als ${user?.email || email}.`, "ready");
@@ -7910,7 +7977,7 @@ async function handleAuthPasswordLogin(event) {
   } catch (error) {
     state.supabaseUser = null;
     setAuthGate(null);
-    updateAuthStatus(error.message, "error");
+    updateAuthStatus(explainAuthError(error), "error");
   }
 }
 
@@ -7939,6 +8006,7 @@ async function handleAuthSignUp() {
 
     if (session && user) {
       state.supabaseUser = user;
+      state.cloudLoaded = false;
       state.passwordRecoveryMode = false;
       setAuthGate(user);
       updateAuthStatus(`Account aangemaakt en ingelogd als ${user.email || email}.`, "ready");
@@ -7947,9 +8015,9 @@ async function handleAuthSignUp() {
       return;
     }
 
-    updateAuthStatus("Account aangemaakt. Check je e-mail om je account te bevestigen en log daarna in.", "ready");
+    updateAuthStatus("Account aangemaakt. Check je e-mail om je account te bevestigen en log daarna in. Kijk ook even in spam als je niets ziet.", "ready");
   } catch (error) {
-    updateAuthStatus(error.message, "error");
+    updateAuthStatus(explainAuthError(error), "error");
   }
 }
 
@@ -7969,9 +8037,9 @@ async function handleAuthForgotPassword() {
     const { resetPasswordForEmail } = await loadSupabaseModule();
     const { error } = await resetPasswordForEmail(email);
     if (error) throw error;
-    updateAuthStatus("Resetmail verstuurd. Check je e-mail.", "ready");
+    updateAuthStatus("Resetmail verstuurd. Open de link op dit apparaat en kies daarna je nieuwe wachtwoord.", "ready");
   } catch (error) {
-    updateAuthStatus(error.message, "error");
+    updateAuthStatus(explainAuthError(error), "error");
   }
 }
 
@@ -7988,6 +8056,7 @@ function handleAuthSaveConfig() {
   els.supabaseUrlInput.value = config.url;
   els.supabaseAnonKeyInput.value = config.anonKey;
   state.supabaseUser = null;
+  state.cloudLoaded = false;
   setAuthGate(null);
   updateAuthStatus("Config opgeslagen. Je kunt nu inloggen.", "ready");
   updateSupabaseStatus("Config opgeslagen. Login om te syncen.", "ready");
@@ -8006,6 +8075,7 @@ async function handleAuthUpdatePassword() {
     const { user, error } = await updatePassword(password);
     if (error) throw error;
     state.supabaseUser = user;
+    state.cloudLoaded = false;
     state.passwordRecoveryMode = false;
     if (els.authResetPanel) els.authResetPanel.hidden = true;
     setAuthGate(user);
@@ -8014,7 +8084,7 @@ async function handleAuthUpdatePassword() {
     window.history.replaceState({}, "", window.location.pathname);
     await handleSupabaseDownload();
   } catch (error) {
-    updateAuthStatus(error.message, "error");
+    updateAuthStatus(explainAuthError(error), "error");
   }
 }
 
@@ -8041,11 +8111,12 @@ async function handleSupabaseSignOut() {
     const { error } = await signOut();
     if (error) throw error;
     state.supabaseUser = null;
+    state.cloudLoaded = false;
     setAuthGate(null);
     updateAuthStatus("Uitgelogd.", "idle");
     updateSupabaseStatus("Uitgelogd bij Supabase.", "idle");
   } catch (error) {
-    updateSupabaseStatus(error.message, "error");
+    updateSupabaseStatus(explainAuthError(error), "error");
   }
 }
 
@@ -8059,7 +8130,7 @@ async function handleSupabaseUpload() {
     if (error) throw error;
     updateSupabaseStatus(`${workouts.length} workout(s) naar Supabase geschreven.`, "ready");
   } catch (error) {
-    updateSupabaseStatus(error.message, "error");
+    updateSupabaseStatus(`Upload mislukt. ${explainSyncError(error)}`, "error");
   }
 }
 
@@ -8069,15 +8140,24 @@ async function handleSupabaseDownload() {
     const { loadSupabaseWorkouts } = await loadSupabaseModule();
     const { workouts, error } = await loadSupabaseWorkouts();
     if (error) throw error;
-    const cleanCloudWorkouts = normalizeAppWorkouts(workouts);
-    state.workouts = cleanCloudWorkouts;
-    saveWorkouts(state.workouts);
-    state.selectedWorkoutId = state.workouts[0]?.id || null;
+    applyCloudWorkouts(workouts, { allowEmptyReplace: false });
+    state.cloudLoaded = true;
     render();
-    updateSupabaseStatus(`${state.workouts.length} workout(s) uit Supabase geladen.`, "ready");
+    updateSupabaseStatus(
+      workouts.length ? `${state.workouts.length} workout(s) uit Supabase geladen.` : "Supabase is leeg; lokale workouts blijven staan.",
+      "ready",
+    );
   } catch (error) {
-    updateSupabaseStatus(error.message, "error");
+    updateSupabaseStatus(`Cloud ophalen mislukt. Lokale data blijft staan. ${explainSyncError(error)}`, "error");
   }
+}
+
+function applyCloudWorkouts(workouts, options = {}) {
+  const cleanCloudWorkouts = normalizeAppWorkouts(workouts || []);
+  if (!cleanCloudWorkouts.length && !options.allowEmptyReplace && state.workouts.length) return;
+  state.workouts = cleanCloudWorkouts;
+  saveWorkouts(state.workouts);
+  state.selectedWorkoutId = state.workouts[0]?.id || null;
 }
 
 async function persistAutoFilledBikeHr() {
@@ -9367,6 +9447,7 @@ function bindEvents() {
     if (els.authSupabaseUrlInput) els.authSupabaseUrlInput.value = config.url;
     if (els.authSupabaseAnonKeyInput) els.authSupabaseAnonKeyInput.value = config.anonKey;
     state.supabaseUser = null;
+    state.cloudLoaded = false;
     setAuthGate(null);
     updateAuthStatus("Config opgeslagen. Log opnieuw in.", "ready");
     updateSupabaseStatus("Supabase config opgeslagen. Login om te syncen.", "ready");

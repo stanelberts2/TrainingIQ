@@ -8,8 +8,14 @@
       content="TrainIQ is een persoonlijk trainingsdashboard voor workouts, zones en progressie."
     />
     <meta name="theme-color" content="#f6f7f8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TrainIQ" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>TrainIQ</title>
     <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
     <link rel="stylesheet" href="./styles.css?v=daily-sync-1" />
   </head>
   <body>
@@ -25,7 +31,7 @@
         <div>
           <p class="eyebrow">Prive toegang</p>
           <h1>Log in om je trainingsdata te bekijken.</h1>
-          <p class="auth-copy">Alle workouts, analyses en Strava-data blijven achter je eigen Supabase-login.</p>
+          <p class="auth-copy">Log in met e-mail en wachtwoord. Je browser kan dit wachtwoord bewaren voor Face ID of iCloud Sleutelhanger.</p>
         </div>
 
         <form class="auth-form" id="authForm">
@@ -586,6 +592,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=intensity-analysis-v1"></script>
+    <script type="module" src="./app.js?v=foundation-sync-v1"></script>
   </body>
 </html>

@@ -113,16 +113,12 @@ export async function getStravaAuthUrl() {
   const supabase = getSupabaseClient();
   if (!supabase) return { url: "", error: new Error("Supabase is not configured.") };
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) return { url: "", error: sessionError };
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) return { url: "", error: new Error("Login eerst bij Supabase.") };
+  const { headers, error: authError } = await functionAuthHeaders(supabase);
+  if (authError) return { url: "", error: authError };
 
   const { data, error } = await supabase.functions.invoke("strava-auth-url", {
     body: { redirectTo: window.location.href.split("?")[0] },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
   });
 
   if (error) return { url: "", error };
@@ -133,9 +129,12 @@ export async function syncStravaNow(options = 10) {
   const supabase = getSupabaseClient();
   if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
   const body = typeof options === "number" ? { limit: options } : options;
+  const { headers, error: authError } = await functionAuthHeaders(supabase);
+  if (authError) return { result: null, error: authError };
 
   const { data, error } = await supabase.functions.invoke("strava-sync-now", {
     body,
+    headers,
   });
 
   return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
@@ -145,16 +144,12 @@ export async function testIntervalsIcuConnection() {
   const supabase = getSupabaseClient();
   if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) return { result: null, error: sessionError };
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+  const { headers, error: authError } = await functionAuthHeaders(supabase);
+  if (authError) return { result: null, error: authError };
 
   const { data, error } = await supabase.functions.invoke("intervals-test", {
     body: {},
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
   });
 
   return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
@@ -164,19 +159,15 @@ export async function previewIntervalsIcuImport(options = {}) {
   const supabase = getSupabaseClient();
   if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) return { result: null, error: sessionError };
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+  const { headers, error: authError } = await functionAuthHeaders(supabase);
+  if (authError) return { result: null, error: authError };
 
   const { data, error } = await supabase.functions.invoke("intervals-test", {
     body: {
       previewLimit: options.previewLimit || 8,
       days: options.days || 30,
     },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
   });
 
   return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
@@ -186,19 +177,15 @@ export async function syncIntervalsIcuSummary(options = {}) {
   const supabase = getSupabaseClient();
   if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) return { result: null, error: sessionError };
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+  const { headers, error: authError } = await functionAuthHeaders(supabase);
+  if (authError) return { result: null, error: authError };
 
   const { data, error } = await supabase.functions.invoke("intervals-sync", {
     body: {
       days: options.days || 30,
       limit: options.limit || 80,
     },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
   });
 
   return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
@@ -208,19 +195,30 @@ export async function importStravaActivity(activityId) {
   const supabase = getSupabaseClient();
   if (!supabase) return { result: null, error: new Error("Supabase is not configured.") };
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) return { result: null, error: sessionError };
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) return { result: null, error: new Error("Login eerst bij Supabase.") };
+  const { headers, error: authError } = await functionAuthHeaders(supabase);
+  if (authError) return { result: null, error: authError };
 
   const { data, error } = await supabase.functions.invoke("strava-import-activity", {
     body: { activityId },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
   });
 
   return { result: data || null, error: error ? await normalizeFunctionError(error) : null };
+}
+
+async function functionAuthHeaders(supabase) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { headers: {}, error: sessionError };
+
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) return { headers: {}, error: new Error("Login eerst bij Supabase.") };
+
+  return {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    error: null,
+  };
 }
 
 async function normalizeFunctionError(error) {
