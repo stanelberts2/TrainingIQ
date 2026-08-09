@@ -4751,6 +4751,7 @@ function renderWorkoutDetail() {
     ${shouldShowSourceDetection(selected) ? renderSourceDetection(selected) : ""}
 
     ${renderWorkoutDetailMetrics(selected)}
+    ${renderWorkoutCoachAnalysis(selected, z2Group, family)}
     ${renderWorkoutDetailStreamRefreshPanel(selected)}
     ${renderRunPaceHrStreamAnalysis(selected)}
 
@@ -4835,6 +4836,328 @@ function renderWorkoutDetailMetrics(workout) {
       ${rows.map(([label, value, meta]) => workoutDetailMetric(label, value, meta || "")).join("")}
     </section>
   `;
+}
+
+function renderWorkoutCoachAnalysis(workout, z2Group, family) {
+  const analysis = coachAnalysisForWorkout(workout, z2Group, family);
+  if (!analysis) return "";
+
+  const cards = (analysis.cards || [])
+    .filter((card) => !isEmptyDisplayValue(card.value) || !isEmptyDisplayValue(card.text))
+    .map((card) => `
+      <article class="z2-progress-card ${card.tone || ""}">
+        <span>${escapeHtml(card.label)}</span>
+        <strong>${card.value}</strong>
+        <small>${escapeHtml(card.text || "")}</small>
+      </article>
+    `).join("");
+
+  const notes = (analysis.notes || []).filter(Boolean);
+
+  return `
+    <section class="workout-detail-section">
+      <div class="workout-detail-section-header">
+        <div>
+          <strong>Coach analyse</strong>
+          <span>${escapeHtml(analysis.subtitle)}</span>
+        </div>
+      </div>
+      <div class="z2-insight-grid">
+        <section class="z2-insight-card ${analysis.tone || ""}">
+          <span>${escapeHtml(analysis.kicker || "Interpretatie")}</span>
+          <strong>${escapeHtml(analysis.title)}</strong>
+          <p>${escapeHtml(analysis.body)}</p>
+        </section>
+        <section class="z2-insight-card">
+          <span>Vergelijkingslogica</span>
+          <strong>${escapeHtml(analysis.comparisonTitle)}</strong>
+          <p>${escapeHtml(analysis.comparisonBody)}</p>
+        </section>
+      </div>
+      ${cards ? `<div class="z2-detail-grid">${cards}</div>` : ""}
+      ${notes.length ? `<ul class="coach-analysis-notes">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}
+    </section>
+  `;
+}
+
+function coachAnalysisForWorkout(workout, z2Group, family = workoutAnalysisFamily(workout)) {
+  const easyRunGroup = z2Group || getWorkoutDetailEasyRunGroup(workout, family);
+  if (easyRunGroup) return z2CoachAnalysis(workout, easyRunGroup);
+  if (family === "vo2max") return intensityCoachAnalysis(workout, "vo2");
+  if (family === "threshold") return intensityCoachAnalysis(workout, "threshold");
+  if (family === "hyrox") return hyroxCoachAnalysis(workout);
+  if (family === "strength") return strengthCoachAnalysis(workout);
+  return generalCoachAnalysis(workout, family);
+}
+
+function z2CoachAnalysis(workout, group) {
+  const selectedStats = z2StatsForGroupWorkouts([workout], group.key);
+  const matches = getZ2MatchedWorkouts(workout, group.workouts, group.key, {
+    limit: 8,
+    includeFuture: false,
+    minScore: 60,
+  });
+  const previousStats = z2StatsForGroupWorkouts(matches.map((match) => match.workout), group.key);
+  const efficiency = z2EfficiencyComparison(group.key, selectedStats, previousStats);
+  const insight = z2EfficiencyInsight(group.key, selectedStats, previousStats);
+  const { start, end } = comparisonWindowSixMonthsBefore(workout.date);
+  const sixMonthWorkouts = group.workouts.filter((candidate) => {
+    if (candidate.id === workout.id) return false;
+    const date = new Date(candidate.date);
+    return date >= start && date < end;
+  });
+  const sixMonthStats = z2StatsForGroupWorkouts(sixMonthWorkouts, group.key);
+  const sixMonthMetric = z2ComparisonMetricForGroup(group.key, selectedStats, sixMonthStats);
+  const currentMetric = group.key === "run"
+    ? formatPacePerKm(selectedStats.paceSecPerKm)
+    : group.key === "bike"
+      ? formatWatts(selectedStats.avgWatts)
+      : formatPace500(selectedStats.pace500Sec);
+  const matchMetricDelta = group.key === "run"
+    ? formatPaceDelta(selectedStats.paceSecPerKm, previousStats.paceSecPerKm)
+    : group.key === "bike"
+      ? formatWattsDelta(selectedStats.avgWatts, previousStats.avgWatts)
+      : formatErg500Delta(selectedStats.pace500Sec, previousStats.pace500Sec);
+
+  return {
+    kicker: "Z2 interpretatie",
+    title: insight.title,
+    body: insight.body,
+    tone: insight.tone,
+    subtitle: `${group.label} · pace/snelheid wordt samen met hartslag gelezen.`,
+    comparisonTitle: matches.length ? `${matches.length} vergelijkbare sessie(s)` : "Nieuwe referentie",
+    comparisonBody: matches.length
+      ? `${z2MatchSummary(matches)}. Under/overs, wedstrijden en andere trainingsvormen tellen hier niet mee.`
+      : "Deze sessie wordt vanaf nu gebruikt als referentie voor latere vergelijkbare Z2-sessies.",
+    cards: [
+      {
+        label: group.key === "run" ? "Pace" : group.key === "bike" ? "Wattage" : "Tempo /500m",
+        value: currentMetric,
+        text: matchMetricDelta,
+      },
+      {
+        label: "Hartslag",
+        value: selectedStats.avgHr ? `${Math.round(selectedStats.avgHr)} bpm` : "-",
+        text: formatHrDelta(selectedStats.avgHr, previousStats.avgHr),
+      },
+      {
+        label: "Output per hartslag",
+        value: efficiency.label || "-",
+        text: formatEfficiencyDelta(efficiency.deltaPct, previousStats.count),
+        tone: efficiency.isBetter ? "is-good" : efficiency.isWorse ? "is-warning" : "",
+      },
+      {
+        label: "Zes maanden check",
+        value: sixMonthStats.count ? sixMonthMetric.current : "-",
+        text: sixMonthStats.count
+          ? `${sixMonthMetric.delta} versus ${sixMonthMetric.baseline}`
+          : "Nog geen sessies in het 6-maanden venster.",
+      },
+    ],
+    notes: [
+      group.key === "run" ? "Bij easy runs is langzamer met lagere HR geen slechte training, maar een andere prikkel." : "",
+      "Warmte, route, ondergrond en vermoeidheid kunnen pace-HR vertekenen; streamblokken onderaan helpen dat te checken.",
+    ],
+  };
+}
+
+function intensityCoachAnalysis(workout, kind) {
+  const config = INTENSITY_ANALYSIS_RULES[kind];
+  const currentSession = {
+    workout,
+    kind,
+    profileKey: intensityProfileKey(kind, workout),
+    metrics: kind === "vo2" ? vo2SessionMetrics(workout) : thresholdSessionMetrics(workout),
+  };
+  const currentStats = intensityStats([currentSession], kind);
+  const comparable = comparableIntensitySessions(currentSession, intensitySessions(kind))
+    .filter((session) => session.workout.id !== workout.id);
+  const previousStats = intensityStats(comparable.slice(0, 8), kind);
+  const verdict = intensityProgressVerdict(kind, currentStats, previousStats);
+  const quality = analysisQualityForWorkout(workout, config.family);
+  const paceText = currentStats.avgPace ? formatPacePerKm(currentStats.avgPace) : "-";
+  const stabilityLabel = kind === "vo2" ? "Verval" : "Pace-stabiliteit";
+  const stabilityValue = kind === "vo2"
+    ? (currentStats.decaySeconds ? formatSignedPace(currentStats.decaySeconds) : "-")
+    : (currentStats.variationPct ? `${currentStats.variationPct.toFixed(1)}%` : "-");
+  const qualityText = quality.status === "bruikbaar"
+    ? "Alleen werkblokken tellen mee; rust, warming-up en cooling-down blijven buiten de analyse."
+    : `${quality.missing?.join(" ") || "Er mist nog data in deze sessie."}`;
+
+  return {
+    kicker: `${config.label} interpretatie`,
+    title: verdict.title,
+    body: `${verdict.detail} ${qualityText}`,
+    tone: verdict.tone,
+    subtitle: `${config.label} · analyse op werkblokken, niet op totale workout.`,
+    comparisonTitle: comparable.length ? `${comparable.length} eerdere ${config.label}-sessie(s)` : "Nieuwe baseline",
+    comparisonBody: comparable.length
+      ? `Vergelijking gebruikt dezelfde trainingsfamilie en profiel: ${intensityProfileLabel(currentSession.profileKey)}.`
+      : "Zodra er meer gelabelde werkblokken zijn, kan deze sessie eerlijk naast eerdere trainingen.",
+    cards: [
+      {
+        label: "Gem. werkpace",
+        value: paceText,
+        text: formatPaceDelta(currentStats.avgPace, previousStats.avgPace),
+        tone: currentStats.avgPace && previousStats.avgPace && currentStats.avgPace <= previousStats.avgPace - config.progressPaceSec ? "is-good" : "",
+      },
+      {
+        label: "Werkvolume",
+        value: formatDuration(Math.round(currentStats.durationMin)),
+        text: `${currentStats.usableRows || 0} bruikbare rep(s) · ${currentStats.distanceKm ? `${currentStats.distanceKm.toFixed(2)} km` : "afstand -"}`,
+      },
+      {
+        label: stabilityLabel,
+        value: stabilityValue,
+        text: kind === "vo2"
+          ? "Kleiner verval = reps beter volgehouden."
+          : "Lagere variatie = strakker threshold-blok.",
+      },
+      {
+        label: "Hartslag",
+        value: currentStats.avgHr ? `${Math.round(currentStats.avgHr)} bpm` : "-",
+        text: kind === "vo2" ? "HR is ondersteunend; pace en repkwaliteit zijn leidend." : formatHrDelta(currentStats.avgHr, previousStats.avgHr),
+      },
+    ],
+    notes: [
+      quality.status !== "bruikbaar" ? "Deze workout blijft in datacheck totdat de ontbrekende werkblokdata is aangevuld of bewust is uitgesloten." : "",
+      `${config.targetLabel}.`,
+    ],
+  };
+}
+
+function intensityProfileLabel(profileKey) {
+  return String(profileKey || "")
+    .replace(/^vo2-/, "VO2 ")
+    .replace(/^threshold-/, "Threshold ")
+    .replace(/-/g, " ")
+    .trim() || "standaard profiel";
+}
+
+function hyroxCoachAnalysis(workout) {
+  const previous = sortedWorkouts()
+    .filter((candidate) => candidate.id !== workout.id && workoutAnalysisFamily(candidate) === "hyrox")
+    .slice(0, 8);
+  const currentLoad = estimatedTrainingLoad(workout, "hyrox");
+  const previousLoad = average(previous.map((candidate) => estimatedTrainingLoad(candidate, "hyrox")));
+  const currentSegments = (workout.segments || []).filter((segment) => numberOrZero(segment.durationSeconds) || segment.segmentType || segment.name);
+  const currentIntervals = (workout.intervals || []).filter((interval) => numberOrZero(interval.durationSeconds));
+  const currentDuration = numberOrZero(workout.durationMin);
+  const avgPreviousDuration = average(previous.map((candidate) => numberOrZero(candidate.durationMin)));
+
+  return {
+    kicker: "HYROX interpretatie",
+    title: currentSegments.length || currentIntervals.length ? "Structuur aanwezig" : "Nog beperkte HYROX-structuur",
+    body: currentSegments.length || currentIntervals.length
+      ? "Deze workout heeft onderdelen of laps waarmee we later stations, runs en compromised running apart kunnen vergelijken."
+      : "Voor echte HYROX-analyse moeten run- en stationblokken nog expliciet gelabeld worden.",
+    tone: currentSegments.length || currentIntervals.length ? "is-neutral" : "is-warning",
+    subtitle: "HYROX · voorlopig op structuur, duur, load en RPE totdat stationanalyse af is.",
+    comparisonTitle: previous.length ? `${previous.length} eerdere HYROX-sessie(s)` : "Nieuwe HYROX-referentie",
+    comparisonBody: "HYROX wordt niet gemengd met losse ergs, kracht of normale runs. Alleen echte HYROX-sessies tellen mee.",
+    cards: [
+      {
+        label: "Duur",
+        value: currentDuration ? formatDuration(Math.round(currentDuration)) : "-",
+        text: avgPreviousDuration ? `${formatDurationDelta(currentDuration, avgPreviousDuration)}` : "Nog geen vorige HYROX-duur.",
+      },
+      {
+        label: "Load",
+        value: currentLoad || "-",
+        text: previousLoad ? `${formatSignedNumber(currentLoad - previousLoad, "load")} versus HYROX-gemiddelde` : "Nieuwe loadreferentie.",
+      },
+      {
+        label: "Onderdelen",
+        value: currentSegments.length || currentIntervals.length || "-",
+        text: currentSegments.length ? "Stations/onderdelen aanwezig." : "Gebruik laps/segmenten voor latere stationsanalyse.",
+      },
+      {
+        label: "RPE",
+        value: workoutSessionRpe(workout) ? `RPE ${workoutSessionRpe(workout)}` : "-",
+        text: "RPE maakt HYROX-load straks betrouwbaarder.",
+      },
+    ],
+    notes: [
+      "Volgende stap voor HYROX is run versus station splits apart analyseren.",
+      "Losse SkiErg/RowErg/BikeErg Z2-sessies blijven uit deze vergelijking.",
+    ],
+  };
+}
+
+function strengthCoachAnalysis(workout) {
+  const previous = sortedWorkouts()
+    .filter((candidate) => candidate.id !== workout.id && workoutAnalysisFamily(candidate) === "strength")
+    .slice(0, 8);
+  const sessionRpe = workoutSessionRpe(workout);
+  const load = estimatedTrainingLoad(workout, "strength");
+  const previousLoad = average(previous.map((candidate) => estimatedTrainingLoad(candidate, "strength")));
+  const segments = (workout.segments || []).filter((segment) => segment.name || segment.reps || segment.weightKg || segment.rpe);
+
+  return {
+    kicker: "Kracht interpretatie",
+    title: segments.length ? "Krachtdata deels aanwezig" : "Nog basisregistratie",
+    body: segments.length
+      ? "Deze training heeft losse krachtregels. Voor echte progressie missen we straks nog oefening, gewicht, sets en reps als vaste structuur."
+      : "Voor kracht tellen we nu vooral duur en RPE. Specifieke oefeningen komen later als apart krachtmodel.",
+    tone: "is-neutral",
+    subtitle: "Kracht · voorlopig geen pace-analyse, alleen RPE/load en notities.",
+    comparisonTitle: previous.length ? `${previous.length} eerdere krachtsessie(s)` : "Nieuwe krachtreferentie",
+    comparisonBody: "Kracht wordt bewust niet vergeleken met run-, erg- of HYROX-sessies.",
+    cards: [
+      {
+        label: "Sessie RPE",
+        value: sessionRpe ? `RPE ${sessionRpe}` : "-",
+        text: sessionRpe ? "Wordt gebruikt voor kracht-load." : "Vul RPE in om load zinvoller te maken.",
+      },
+      {
+        label: "Load",
+        value: load || "-",
+        text: previousLoad ? `${formatSignedNumber(load - previousLoad, "load")} versus eerdere krachttrainingen` : "Nieuwe loadreferentie.",
+      },
+      {
+        label: "Duur",
+        value: workout.durationMin ? formatDuration(numberOrZero(workout.durationMin)) : "-",
+        text: "Duur blijft zichtbaar als basiscontext.",
+      },
+      {
+        label: "Oefeningen",
+        value: segments.length || "-",
+        text: segments.length ? "Losse onderdelen opgeslagen." : "Krachtmodel staat op de backlog.",
+      },
+    ],
+    notes: [
+      "Krachtanalyse wordt later pas echt waardevol met oefening, sets, reps, gewicht en PR-historie.",
+    ],
+  };
+}
+
+function generalCoachAnalysis(workout, family) {
+  const quality = analysisQualityForWorkout(workout, family);
+  if (quality.status === "bruikbaar" && !["recovery"].includes(family)) return null;
+  const load = estimatedTrainingLoad(workout, family);
+  return {
+    kicker: "Interpretatie",
+    title: family === "recovery" ? "Herstelprikkel" : "Geen specifiek analysemodel",
+    body: family === "recovery"
+      ? "Deze training wordt als herstel gelezen. Vergelijk hem niet met Z2-progressie, VO2 of threshold."
+      : "Deze workout telt alleen als algemene logboekregel totdat hij een duidelijk analyseprofiel krijgt.",
+    tone: "is-neutral",
+    subtitle: `${analysisFamilyLabel(family)} · geen specialistisch vergelijkingsmodel actief.`,
+    comparisonTitle: "Niet gemengd vergelijken",
+    comparisonBody: "TrainIQ vergelijkt deze workout niet met Z2, VO2, threshold of HYROX om ruis te voorkomen.",
+    cards: [
+      {
+        label: "Load",
+        value: load || "-",
+        text: "Voorlopige proxy; loadmodel staat nog op de verbeterlijst.",
+      },
+      {
+        label: "Datakwaliteit",
+        value: quality.label,
+        text: [...(quality.reasons || []), ...(quality.missing || [])].join(" ") || "Geen directe actie nodig.",
+      },
+    ],
+  };
 }
 
 function renderWorkoutDetailStreamRefreshPanel(workout) {

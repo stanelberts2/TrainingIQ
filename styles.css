@@ -1480,6 +1480,18 @@ textarea {
   background: #f7f9fb;
 }
 
+.coach-analysis-notes {
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.96rem;
+  line-height: 1.45;
+}
+
+.coach-analysis-notes li + li {
+  margin-top: 0.35rem;
+}
+
 .z2-zone-card {
   display: grid;
   gap: 10px;
