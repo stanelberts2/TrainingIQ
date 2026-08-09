@@ -154,6 +154,94 @@ function lapHrFromStreams(lap = {}, index, laps = [], streams = {}) {
   };
 }
 
+function buildStreamSummary(activity = {}, streams = {}) {
+  const time = streamValues(streams, "time").map(numberOrZero);
+  const distance = streamValues(streams, "distance").map(numberOrZero);
+  const heartrate = streamValues(streams, "heartrate").map(validHr);
+  const altitude = streamValues(streams, "altitude").map(numberOrZero);
+  const grade = streamValues(streams, "grade_smooth").map(numberOrZero);
+  const temp = streamValues(streams, "temp").map(numberOrZero);
+  const velocity = streamValues(streams, "velocity_smooth").map(numberOrZero);
+  if (!time.length || !distance.length || !heartrate.length) {
+    return {
+      available: false,
+      reason: "time/distance/heartrate stream ontbreekt",
+      sampleCount: time.length,
+    };
+  }
+
+  const windowSeconds = 300;
+  const buckets = new Map();
+  time.forEach((seconds, index) => {
+    if (!Number.isFinite(seconds)) return;
+    const bucketKey = Math.floor(seconds / windowSeconds);
+    const bucket = buckets.get(bucketKey) || {
+      startSeconds: bucketKey * windowSeconds,
+      endSeconds: bucketKey * windowSeconds,
+      points: [],
+    };
+    bucket.endSeconds = Math.max(bucket.endSeconds, seconds);
+    bucket.points.push({
+      seconds,
+      distance: distance[index],
+      hr: heartrate[index],
+      altitude: altitude[index],
+      grade: grade[index],
+      temp: temp[index],
+      velocity: velocity[index],
+    });
+    buckets.set(bucketKey, bucket);
+  });
+
+  const chunks = [...buckets.values()]
+    .map(streamBucketToChunk)
+    .filter(Boolean)
+    .slice(0, 80);
+  const tempValues = temp.filter((value) => Number.isFinite(value) && value > -30 && value < 60);
+  const gradeValues = grade.filter((value) => Number.isFinite(value));
+
+  return {
+    available: chunks.length > 0,
+    source: "strava_streams",
+    windowSeconds,
+    sampleCount: time.length,
+    avgTempC: average(tempValues) || numberOrZero(activity.average_temp),
+    avgGradePct: gradeValues.length ? average(gradeValues.map((value) => Math.abs(value))) : 0,
+    chunks,
+  };
+}
+
+function streamBucketToChunk(bucket) {
+  const points = bucket.points || [];
+  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const durationSeconds = Math.max(0, numberOrZero(last.seconds) - numberOrZero(first.seconds));
+  const distanceMeters = Math.max(0, numberOrZero(last.distance) - numberOrZero(first.distance));
+  const avgHr = Math.round(average(points.map((point) => validHr(point.hr))));
+  if (durationSeconds < 120 || distanceMeters < 200 || !avgHr) return null;
+
+  const paceSecPerKm = durationSeconds / (distanceMeters / 1000);
+  const tempValues = points.map((point) => point.temp).filter((value) => Number.isFinite(value) && value > -30 && value < 60);
+  const gradeValues = points.map((point) => point.grade).filter((value) => Number.isFinite(value));
+  const altitudeValues = points.map((point) => point.altitude).filter((value) => Number.isFinite(value));
+  const elevationDelta = altitudeValues.length >= 2 ? altitudeValues[altitudeValues.length - 1] - altitudeValues[0] : 0;
+  const metersPerBeat = distanceMeters / (avgHr * (durationSeconds / 60));
+
+  return {
+    startSeconds: Math.round(bucket.startSeconds),
+    endSeconds: Math.round(bucket.endSeconds),
+    durationSeconds: Math.round(durationSeconds),
+    distanceMeters: Math.round(distanceMeters),
+    avgHr,
+    paceSecPerKm: Math.round(paceSecPerKm),
+    metersPerBeat: Number(metersPerBeat.toFixed(3)),
+    elevationDeltaM: Number(elevationDelta.toFixed(1)),
+    avgGradePct: gradeValues.length ? Number(average(gradeValues).toFixed(2)) : 0,
+    avgTempC: tempValues.length ? Number(average(tempValues).toFixed(1)) : 0,
+  };
+}
+
 export function mapStravaWebhookEvent(payload = {}, userId = null) {
   return {
     user_id: userId,
@@ -205,6 +293,7 @@ export function mapStravaActivityToWorkoutRows(activity = {}, laps = [], userId,
   const profile = inferIntervalProfile(lapRows);
   const durationMin = Math.round(numberOrZero(activity.moving_time || activity.elapsed_time) / 60);
   const distanceKm = numberOrZero(activity.distance) / 1000;
+  const streamSummary = buildStreamSummary(activity, streams);
 
   return {
     workout: {
@@ -227,6 +316,7 @@ export function mapStravaActivityToWorkoutRows(activity = {}, laps = [], userId,
       notes: activity.description || "",
       raw_payload: {
         strava_activity: activity,
+        stream_summary: streamSummary,
         source: "strava_import",
       },
       updated_at: new Date().toISOString(),

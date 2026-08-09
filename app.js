@@ -106,6 +106,7 @@ const Z2_ANALYSIS_RULES = {
   ergDurationHardMarginPct: 0.2,
   runProgressPaceSec: 5,
   hrProgressBpm: 2,
+  efficiencyProgressPct: 1.5,
   ergProgressPace500Sec: 2,
   bikeProgressWatts: 5,
   minWorkBlockSeconds: 60,
@@ -2855,6 +2856,7 @@ function renderZ2SelectedWorkoutDetail(group, workouts, selected) {
       ? formatWatts(selectedStats.avgWatts)
       : formatPace500(selectedStats.pace500Sec);
   const efficiency = z2EfficiencyInsight(group.key, selectedStats, previousStats);
+  const efficiencyMetric = z2EfficiencyComparison(group.key, selectedStats, previousStats);
   const context = z2ContextInsight(selectedStats, previousStats);
 
   return `
@@ -2895,6 +2897,11 @@ function renderZ2SelectedWorkoutDetail(group, workouts, selected) {
           <small>${formatHrDelta(selectedStats.avgHr, previousStats.avgHr)}</small>
         </div>
         <div class="z2-progress-card">
+          <span>Output per hartslag</span>
+          <strong>${escapeHtml(efficiencyMetric.label || "-")}</strong>
+          <small>${formatEfficiencyDelta(efficiencyMetric.deltaPct, previousStats.count)}</small>
+        </div>
+        <div class="z2-progress-card">
           <span>Afstand</span>
           <strong>${selectedStats.distanceKm ? `${selectedStats.distanceKm.toFixed(2)} km` : formatDistance(selected)}</strong>
           <small>${formatDistanceDelta(selectedStats.distanceKm, previousStats.distanceKm)}</small>
@@ -2923,17 +2930,16 @@ function z2EfficiencyInsight(groupKey, selectedStats, previousStats) {
   const paceDelta = selectedStats.paceSecPerKm && previousStats.paceSecPerKm
     ? selectedStats.paceSecPerKm - previousStats.paceSecPerKm
     : 0;
+  const efficiency = z2EfficiencyComparison(groupKey, selectedStats, previousStats);
 
   if (groupKey === "run") {
     const paceText = paceDelta ? `${formatSignedPace(paceDelta)} ${paceDelta <= 0 ? "sneller" : "langzamer"}` : "gelijk tempo";
     const hrText = hrDelta ? `${formatSignedNumber(hrDelta, "bpm")} ${hrDelta <= 0 ? "lager" : "hoger"}` : "gelijke hartslag";
-    const isBetter = (paceDelta <= -Z2_ANALYSIS_RULES.runProgressPaceSec && hrDelta <= Z2_ANALYSIS_RULES.hrProgressBpm)
-      || (hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm && paceDelta <= Z2_ANALYSIS_RULES.runProgressPaceSec);
-    const isWorse = paceDelta > Z2_ANALYSIS_RULES.runProgressPaceSec && hrDelta > Z2_ANALYSIS_RULES.hrProgressBpm;
+    const interpretation = z2RunPaceHrInterpretation(paceDelta, hrDelta, efficiency.deltaPct);
     return {
-      tone: isBetter ? "is-good" : isWorse ? "is-warning" : "is-neutral",
-      title: isBetter ? "Progressie zichtbaar" : isWorse ? "Zwaarder dan gemiddeld" : "Ongeveer stabiel",
-      body: `Bij vergelijkbare Z2-runs liep je deze keer ${paceText} met ${hrText}.`,
+      tone: interpretation.tone,
+      title: interpretation.title,
+      body: `Bij vergelijkbare Z2-runs liep je deze keer ${paceText} met ${hrText}. ${efficiency.text} ${interpretation.detail}`,
     };
   }
 
@@ -2941,23 +2947,153 @@ function z2EfficiencyInsight(groupKey, selectedStats, previousStats) {
     const wattsDelta = selectedStats.avgWatts && previousStats.avgWatts ? selectedStats.avgWatts - previousStats.avgWatts : 0;
     const wattsText = wattsDelta ? `${wattsDelta > 0 ? "+" : ""}${Math.round(wattsDelta)} W ${wattsDelta >= 0 ? "hoger" : "lager"}` : "gelijk wattage";
     const hrText = hrDelta ? `${formatSignedNumber(hrDelta, "bpm")} ${hrDelta <= 0 ? "lager" : "hoger"}` : "gelijke hartslag";
-    const isBetter = (wattsDelta >= Z2_ANALYSIS_RULES.bikeProgressWatts && hrDelta <= Z2_ANALYSIS_RULES.hrProgressBpm)
+    const isBetter = efficiency.isBetter
+      || (wattsDelta >= Z2_ANALYSIS_RULES.bikeProgressWatts && hrDelta <= Z2_ANALYSIS_RULES.hrProgressBpm)
       || hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm;
     return {
       tone: isBetter ? "is-good" : "is-neutral",
       title: isBetter ? "Progressie zichtbaar" : "Vergelijkbare prikkel",
-      body: `Bij vergelijkbare BikeErg Z2-sessies zat je op ${wattsText} met ${hrText}.`,
+      body: `Bij vergelijkbare BikeErg Z2-sessies zat je op ${wattsText} met ${hrText}. ${efficiency.text}`,
     };
   }
 
   const ergText = formatErg500Delta(selectedStats.pace500Sec, previousStats.pace500Sec);
   const hrText = hrDelta ? `${formatSignedNumber(hrDelta, "bpm")} ${hrDelta <= 0 ? "lager" : "hoger"}` : "gelijke hartslag";
-  const isBetter = (selectedStats.pace500Sec && previousStats.pace500Sec && selectedStats.pace500Sec <= previousStats.pace500Sec - Z2_ANALYSIS_RULES.ergProgressPace500Sec)
+  const isBetter = efficiency.isBetter
+    || (selectedStats.pace500Sec && previousStats.pace500Sec && selectedStats.pace500Sec <= previousStats.pace500Sec - Z2_ANALYSIS_RULES.ergProgressPace500Sec)
     || hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm;
   return {
     tone: isBetter ? "is-good" : "is-neutral",
     title: `${intervalExerciseTypeLabels[groupKey] || "ERG"} vergelijking`,
-    body: `Je /500m tempo geeft: ${ergText}. Hartslag: ${hrText}.`,
+    body: `Je /500m tempo geeft: ${ergText}. Hartslag: ${hrText}. ${efficiency.text}`,
+  };
+}
+
+function z2EfficiencyComparison(groupKey, currentStats, previousStats) {
+  const current = z2EfficiencyMetric(groupKey, currentStats);
+  const previous = z2EfficiencyMetric(groupKey, previousStats);
+  if (!current.value || !previous.value) {
+    return {
+      value: current.value,
+      deltaPct: 0,
+      isBetter: false,
+      isWorse: false,
+      text: "Efficiency wordt gevuld zodra output en hartslag compleet zijn.",
+    };
+  }
+
+  const deltaPct = ((current.value - previous.value) / previous.value) * 100;
+  const isBetter = deltaPct >= Z2_ANALYSIS_RULES.efficiencyProgressPct;
+  const isWorse = deltaPct <= -Z2_ANALYSIS_RULES.efficiencyProgressPct;
+  const direction = deltaPct >= 0 ? "hoger" : "lager";
+  return {
+    ...current,
+    previousValue: previous.value,
+    deltaPct,
+    isBetter,
+    isWorse,
+    text: `Output per hartslag is ${Math.abs(deltaPct).toFixed(1)}% ${direction} (${current.label}).`,
+  };
+}
+
+function z2EfficiencyMetric(groupKey, stats) {
+  const hr = stats.avgHr;
+  if (!hr) return { value: 0, label: "HR ontbreekt" };
+
+  if (groupKey === "bike") {
+    const watts = stats.avgWatts;
+    if (!watts) return { value: 0, label: "watt/slag ontbreekt" };
+    return {
+      value: watts / hr,
+      label: `${(watts / hr).toFixed(2)} W/bpm`,
+    };
+  }
+
+  if (isErgComponentGroup(groupKey)) {
+    const pace = stats.pace500Sec;
+    if (!pace) return { value: 0, label: "m/slag ontbreekt" };
+    const metersPerBeat = (500 / (pace / 60)) / hr;
+    return {
+      value: metersPerBeat,
+      label: `${metersPerBeat.toFixed(2)} m/bpm`,
+    };
+  }
+
+  const distanceMeters = numberOrZero(stats.distanceKm) * 1000;
+  const durationMin = numberOrZero(stats.durationMin);
+  if (!distanceMeters || !durationMin) return { value: 0, label: "m/slag ontbreekt" };
+  const metersPerBeat = distanceMeters / (hr * durationMin);
+  return {
+    value: metersPerBeat,
+    label: `${metersPerBeat.toFixed(2)} m/bpm`,
+  };
+}
+
+function z2RunPaceHrInterpretation(paceDelta, hrDelta, efficiencyDeltaPct = 0) {
+  const paceLimit = Z2_ANALYSIS_RULES.runProgressPaceSec;
+  const hrLimit = Z2_ANALYSIS_RULES.hrProgressBpm;
+  const efficiencyLimit = Z2_ANALYSIS_RULES.efficiencyProgressPct;
+
+  if (efficiencyDeltaPct >= efficiencyLimit) {
+    return {
+      tone: "is-good",
+      title: "Efficiënter gelopen",
+      detail: "Je kreeg meer snelheid terug per hartslag; dat is de beste Z2-progressie-indicator.",
+    };
+  }
+
+  if (efficiencyDeltaPct <= -efficiencyLimit) {
+    return {
+      tone: "is-warning",
+      title: "Minder efficiënt",
+      detail: "Je betaalde relatief meer hartslag voor je tempo; check vermoeidheid, warmte, ondergrond of route.",
+    };
+  }
+
+  if (paceDelta <= -paceLimit && hrDelta <= hrLimit) {
+    return {
+      tone: "is-good",
+      title: "Sneller bij vergelijkbare HR",
+      detail: "Dit wijst op echte aerobe progressie.",
+    };
+  }
+
+  if (hrDelta <= -hrLimit && paceDelta <= paceLimit) {
+    return {
+      tone: "is-good",
+      title: "Lagere HR bij vergelijkbaar tempo",
+      detail: "Je liep zuiniger dan je referentie.",
+    };
+  }
+
+  if (paceDelta > paceLimit && hrDelta <= -hrLimit) {
+    return {
+      tone: "is-neutral",
+      title: "Rustiger uitgevoerd",
+      detail: "Langzamer met lagere HR is vooral een andere intensiteit, niet automatisch slechter.",
+    };
+  }
+
+  if (paceDelta <= -paceLimit && hrDelta > hrLimit) {
+    return {
+      tone: "is-neutral",
+      title: "Harder gewerkt",
+      detail: "Sneller met hogere HR kan nuttig zijn, maar is minder zuiver als Z2-progressiecheck.",
+    };
+  }
+
+  if (paceDelta > paceLimit && hrDelta > hrLimit) {
+    return {
+      tone: "is-warning",
+      title: "Zwaarder dan gemiddeld",
+      detail: "Tempo was lager en hartslag hoger dan bij je vergelijkbare sessies.",
+    };
+  }
+
+  return {
+    tone: "is-neutral",
+    title: "Ongeveer stabiel",
+    detail: "De verschillen blijven binnen normale dagschommeling.",
   };
 }
 
@@ -3093,9 +3229,17 @@ function formatDurationDelta(current, previous) {
   return `${delta > 0 ? "+" : ""}${delta} min versus eerdere sessies`;
 }
 
+function formatEfficiencyDelta(deltaPct, hasPrevious = true) {
+  if (!hasPrevious || !Number.isFinite(deltaPct)) return "Geen vorige periode";
+  if (Math.abs(deltaPct) < 0.05) return "Gelijk aan referentie";
+  const direction = deltaPct >= 0 ? "beter" : "lager";
+  return `${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}% ${direction} dan referentie`;
+}
+
 function renderZ2ProgressCards(group, currentStats, previousStats) {
   const verdict = z2ProgressVerdict(group.key, currentStats, previousStats);
   const baselineDelta = group.key === "run" ? z2BaselineDelta(currentStats) : null;
+  const efficiency = z2EfficiencyComparison(group.key, currentStats, previousStats);
   const paceLabel = group.key === "run" ? "Gem. pace" : group.key === "bike" ? "Gem. wattage" : "Gem. /500m";
   const paceValue = group.key === "run"
     ? formatPacePerKm(currentStats.paceSecPerKm)
@@ -3124,6 +3268,11 @@ function renderZ2ProgressCards(group, currentStats, previousStats) {
         <span>Gem. hartslag</span>
         <strong>${currentStats.avgHr ? `${Math.round(currentStats.avgHr)} bpm` : "-"}</strong>
         <small>${formatHrDelta(currentStats.avgHr, previousStats.avgHr)}</small>
+      </article>
+      <article class="z2-progress-card">
+        <span>Output per hartslag</span>
+        <strong>${escapeHtml(efficiency.label || "-")}</strong>
+        <small>${formatEfficiencyDelta(efficiency.deltaPct, previousStats.count)}</small>
       </article>
       <article class="z2-progress-card">
         <span>Volume</span>
@@ -3838,27 +3987,30 @@ function z2YearBackText(groupKey, currentStats, yearBackStats) {
   if (groupKey === "run") {
     const paceDelta = currentStats.paceSecPerKm && yearBackStats.paceSecPerKm ? currentStats.paceSecPerKm - yearBackStats.paceSecPerKm : 0;
     const hrDelta = currentStats.avgHr && yearBackStats.avgHr ? currentStats.avgHr - yearBackStats.avgHr : 0;
-    const isBetter = (paceDelta <= -5 && hrDelta <= 2) || (hrDelta <= -2 && paceDelta <= 5);
+    const efficiency = z2EfficiencyComparison(groupKey, currentStats, yearBackStats);
+    const interpretation = z2RunPaceHrInterpretation(paceDelta, hrDelta, efficiency.deltaPct);
     return {
-      title: isBetter ? "Beter dan vorig jaar" : "Vergelijk met nuance",
-      body: `Ten opzichte van dezelfde periode vorig jaar: ${formatSignedPace(paceDelta)} en ${formatSignedNumber(hrDelta, "bpm")}.`,
+      title: interpretation.tone === "is-good" ? "Beter dan vorig jaar" : interpretation.tone === "is-warning" ? "Zwaarder dan vorig jaar" : "Vergelijk met nuance",
+      body: `Ten opzichte van dezelfde periode vorig jaar: ${formatSignedPace(paceDelta)} en ${formatSignedNumber(hrDelta, "bpm")}. ${efficiency.text}`,
     };
   }
 
   if (groupKey === "bike") {
     const wattsDelta = currentStats.avgWatts && yearBackStats.avgWatts ? currentStats.avgWatts - yearBackStats.avgWatts : 0;
     const hrDelta = currentStats.avgHr && yearBackStats.avgHr ? currentStats.avgHr - yearBackStats.avgHr : 0;
+    const efficiency = z2EfficiencyComparison(groupKey, currentStats, yearBackStats);
     return {
-      title: wattsDelta >= 5 || hrDelta <= -2 ? "Beter dan vorig jaar" : "Vergelijk met nuance",
-      body: `Ten opzichte van dezelfde periode vorig jaar: ${formatWattsDelta(currentStats.avgWatts, yearBackStats.avgWatts)} en ${formatSignedNumber(hrDelta, "bpm")}.`,
+      title: efficiency.isBetter || wattsDelta >= 5 || hrDelta <= -2 ? "Beter dan vorig jaar" : "Vergelijk met nuance",
+      body: `Ten opzichte van dezelfde periode vorig jaar: ${formatWattsDelta(currentStats.avgWatts, yearBackStats.avgWatts)} en ${formatSignedNumber(hrDelta, "bpm")}. ${efficiency.text}`,
     };
   }
 
   const paceDelta = currentStats.pace500Sec && yearBackStats.pace500Sec ? currentStats.pace500Sec - yearBackStats.pace500Sec : 0;
   const hrDelta = currentStats.avgHr && yearBackStats.avgHr ? currentStats.avgHr - yearBackStats.avgHr : 0;
+  const efficiency = z2EfficiencyComparison(groupKey, currentStats, yearBackStats);
   return {
-    title: paceDelta <= -2 || hrDelta <= -2 ? "Beter dan vorig jaar" : "Jaarbasis beschikbaar",
-    body: `Ten opzichte van dezelfde periode vorig jaar: ${formatErg500Delta(currentStats.pace500Sec, yearBackStats.pace500Sec)} en ${formatSignedNumber(hrDelta, "bpm")}.`,
+    title: efficiency.isBetter || paceDelta <= -2 || hrDelta <= -2 ? "Beter dan vorig jaar" : "Jaarbasis beschikbaar",
+    body: `Ten opzichte van dezelfde periode vorig jaar: ${formatErg500Delta(currentStats.pace500Sec, yearBackStats.pace500Sec)} en ${formatSignedNumber(hrDelta, "bpm")}. ${efficiency.text}`,
   };
 }
 
@@ -4234,36 +4386,49 @@ function z2ProgressVerdict(groupKey, currentStats, previousStats) {
   const paceDelta = currentStats.paceSecPerKm && previousStats.paceSecPerKm
     ? currentStats.paceSecPerKm - previousStats.paceSecPerKm
     : 0;
-  const isRunProgress = groupKey === "run"
-    && ((paceDelta <= -Z2_ANALYSIS_RULES.runProgressPaceSec && hrDelta <= Z2_ANALYSIS_RULES.hrProgressBpm) || (hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm && paceDelta <= Z2_ANALYSIS_RULES.runProgressPaceSec));
+  const efficiency = z2EfficiencyComparison(groupKey, currentStats, previousStats);
+  const runInterpretation = groupKey === "run"
+    ? z2RunPaceHrInterpretation(paceDelta, hrDelta, efficiency.deltaPct)
+    : null;
+  const isRunProgress = groupKey === "run" && runInterpretation?.tone === "is-good";
   const wattsDelta = currentStats.avgWatts && previousStats.avgWatts ? currentStats.avgWatts - previousStats.avgWatts : 0;
   const isBikeProgress = groupKey === "bike"
-    && ((wattsDelta >= Z2_ANALYSIS_RULES.bikeProgressWatts && hrDelta <= Z2_ANALYSIS_RULES.hrProgressBpm) || hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm);
+    && (efficiency.isBetter || (wattsDelta >= Z2_ANALYSIS_RULES.bikeProgressWatts && hrDelta <= Z2_ANALYSIS_RULES.hrProgressBpm) || hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm);
   const isErgProgress = isErgComponentGroup(groupKey)
-    && (hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm || (currentStats.pace500Sec && previousStats.pace500Sec && currentStats.pace500Sec <= previousStats.pace500Sec - Z2_ANALYSIS_RULES.ergProgressPace500Sec));
+    && (efficiency.isBetter || hrDelta <= -Z2_ANALYSIS_RULES.hrProgressBpm || (currentStats.pace500Sec && previousStats.pace500Sec && currentStats.pace500Sec <= previousStats.pace500Sec - Z2_ANALYSIS_RULES.ergProgressPace500Sec));
 
   if (isRunProgress || isBikeProgress || isErgProgress) {
     const thresholdText = groupKey === "run"
-      ? "minimaal 2 bpm lager of 5 sec/km sneller"
+      ? `minimaal ${Z2_ANALYSIS_RULES.efficiencyProgressPct}% meer output per hartslag, 2 bpm lager of 5 sec/km sneller`
       : groupKey === "bike"
-        ? "minimaal 2 bpm lager of 5 watt hoger"
-        : "minimaal 2 bpm lager of 2 sec/500m sneller";
+        ? `minimaal ${Z2_ANALYSIS_RULES.efficiencyProgressPct}% meer W/bpm, 2 bpm lager of 5 watt hoger`
+        : `minimaal ${Z2_ANALYSIS_RULES.efficiencyProgressPct}% meer m/bpm, 2 bpm lager of 2 sec/500m sneller`;
     return {
       tone: "is-good",
-      title: "Progressie zichtbaar",
+      title: groupKey === "run" ? runInterpretation.title : "Progressie zichtbaar",
       detail: `Je haalt jouw drempel: ${thresholdText} bij vergelijkbare inspanning.`,
     };
   }
 
+  if (groupKey === "run" && runInterpretation?.tone === "is-warning") {
+    return {
+      tone: "is-warning",
+      title: runInterpretation.title,
+      detail: runInterpretation.detail,
+    };
+  }
+
   const stableThresholdText = groupKey === "run"
-    ? "2 bpm of 5 sec/km"
+    ? `${Z2_ANALYSIS_RULES.efficiencyProgressPct}% efficiency, 2 bpm of 5 sec/km`
     : groupKey === "bike"
-      ? "2 bpm of 5 watt"
-      : "2 bpm of 2 sec/500m";
+      ? `${Z2_ANALYSIS_RULES.efficiencyProgressPct}% W/bpm, 2 bpm of 5 watt`
+      : `${Z2_ANALYSIS_RULES.efficiencyProgressPct}% m/bpm, 2 bpm of 2 sec/500m`;
   return {
     tone: "is-neutral",
-    title: "Stabiel",
-    detail: `Nog geen duidelijke sprong volgens je drempel van ${stableThresholdText}.`,
+    title: groupKey === "run" ? runInterpretation?.title || "Stabiel" : "Stabiel",
+    detail: groupKey === "run" && runInterpretation?.detail
+      ? `${runInterpretation.detail} Drempel: ${stableThresholdText}.`
+      : `Nog geen duidelijke sprong volgens je drempel van ${stableThresholdText}.`,
   };
 }
 
@@ -4585,6 +4750,7 @@ function renderWorkoutDetail() {
     ${shouldShowSourceDetection(selected) ? renderSourceDetection(selected) : ""}
 
     ${renderWorkoutDetailMetrics(selected)}
+    ${renderRunPaceHrStreamAnalysis(selected)}
 
     ${renderWorkoutLongTermComparison(selected, z2Group, family)}
     ${family === "strength" ? "" : renderWorkoutAnalysisModel(selected)}
@@ -4667,6 +4833,129 @@ function renderWorkoutDetailMetrics(workout) {
       ${rows.map(([label, value, meta]) => workoutDetailMetric(label, value, meta || "")).join("")}
     </section>
   `;
+}
+
+function renderRunPaceHrStreamAnalysis(workout) {
+  if (workout.sport !== "running") return "";
+  const summary = workout.rawPayload?.stream_summary || workout.rawPayload?.streamSummary;
+  const chunks = Array.isArray(summary?.chunks) ? summary.chunks : [];
+  if (!chunks.length) return "";
+
+  const usable = chunks.filter((chunk) => chunk.paceSecPerKm && validHr(chunk.avgHr));
+  if (!usable.length) return "";
+
+  const avgEfficiency = average(usable.map((chunk) => numberOrZero(chunk.metersPerBeat)));
+  const avgTemp = average(usable.map((chunk) => numberOrZero(chunk.avgTempC))) || numberOrZero(summary.avgTempC);
+  const avgGrade = average(usable.map((chunk) => Math.abs(numberOrZero(chunk.avgGradePct)))) || numberOrZero(summary.avgGradePct);
+  const shownChunks = usable.slice(0, 16);
+  const remaining = Math.max(0, usable.length - shownChunks.length);
+  const interpretation = runStreamInterpretation(usable, avgTemp, avgGrade);
+
+  return `
+    <section class="workout-detail-section">
+      <div class="workout-detail-section-header">
+        <div>
+          <strong>Pace-HR verloop</strong>
+          <span>5-minutenblokken uit Strava-streams. Handig om easy Z2, under/overs, warmte en route-effect te herkennen.</span>
+        </div>
+      </div>
+      <div class="z2-insight-grid">
+        <section class="z2-insight-card ${interpretation.tone}">
+          <span>Interpretatie</span>
+          <strong>${escapeHtml(interpretation.title)}</strong>
+          <p>${escapeHtml(interpretation.detail)}</p>
+        </section>
+        <section class="z2-insight-card">
+          <span>Omstandigheden</span>
+          <strong>${avgTemp ? `${Math.round(avgTemp)} graden` : "Temperatuur onbekend"}</strong>
+          <p>${avgGrade ? `Gem. routehelling ${avgGrade.toFixed(1)}%. ` : ""}${avgEfficiency ? `Gem. output per hartslag ${avgEfficiency.toFixed(2)} m/bpm.` : "Efficiency wordt gevuld zodra pace en HR compleet zijn."}</p>
+        </section>
+      </div>
+      <div class="workout-detail-table">
+        <div class="workout-detail-row workout-detail-head">
+          <span>Blok</span>
+          <span>Pace</span>
+          <span>HR</span>
+          <span>m/bpm</span>
+          <span>Hoogte</span>
+          <span>Temp</span>
+        </div>
+        ${shownChunks.map((chunk) => `
+          <div class="workout-detail-row">
+            <span>${escapeHtml(formatStreamRange(chunk))}</span>
+            <span>${formatPacePerKm(chunk.paceSecPerKm)}</span>
+            <span>${validHr(chunk.avgHr) || "-"}</span>
+            <span>${chunk.metersPerBeat ? Number(chunk.metersPerBeat).toFixed(2) : "-"}</span>
+            <span>${formatElevationDelta(chunk.elevationDeltaM)}</span>
+            <span>${formatTemperature(chunk.avgTempC)}</span>
+          </div>
+        `).join("")}
+      </div>
+      ${remaining ? `<p class="z2-detail-note">+${remaining} extra 5-minutenblok(ken) niet getoond om het scherm rustig te houden.</p>` : ""}
+    </section>
+  `;
+}
+
+function runStreamInterpretation(chunks, avgTemp = 0, avgGrade = 0) {
+  if (chunks.length < 2) {
+    return {
+      tone: "is-neutral",
+      title: "Nog weinig verloopdata",
+      detail: "Er is maar een bruikbaar blok, dus dit zegt vooral iets over deze run zelf.",
+    };
+  }
+
+  const first = chunks[0];
+  const last = chunks[chunks.length - 1];
+  const paceDelta = numberOrZero(last.paceSecPerKm) - numberOrZero(first.paceSecPerKm);
+  const hrDelta = validHr(last.avgHr) - validHr(first.avgHr);
+  const efficiencyDelta = numberOrZero(last.metersPerBeat) - numberOrZero(first.metersPerBeat);
+  const warmText = avgTemp >= 22 ? " Warmte kan je hartslag extra omhoog duwen." : "";
+  const gradeText = avgGrade >= 1.5 ? " Route/hoogteverschil kan pace-HR vertekenen." : "";
+
+  if (hrDelta >= 6 && paceDelta >= 5) {
+    return {
+      tone: "is-warning",
+      title: "Hartslagdrift zichtbaar",
+      detail: `Later in de run ging HR +${hrDelta} bpm omhoog terwijl pace ${formatSignedPace(paceDelta)} veranderde.${warmText}${gradeText}`,
+    };
+  }
+
+  if (efficiencyDelta > 0.03 && hrDelta <= 4) {
+    return {
+      tone: "is-good",
+      title: "Efficiënt verloop",
+      detail: `Je output per hartslag bleef stabiel of verbeterde richting het einde.${warmText}${gradeText}`,
+    };
+  }
+
+  return {
+    tone: "is-neutral",
+    title: "Verloop redelijk stabiel",
+    detail: `Pace-HR verandert beperkt over de run. Gebruik dit naast titel/doel om easy Z2 en under/overs uit elkaar te houden.${warmText}${gradeText}`,
+  };
+}
+
+function formatStreamRange(chunk) {
+  return `${formatClockSeconds(chunk.startSeconds)}-${formatClockSeconds(chunk.endSeconds)}`;
+}
+
+function formatClockSeconds(seconds) {
+  const rounded = Math.max(0, Math.round(numberOrZero(seconds)));
+  const minutes = Math.floor(rounded / 60);
+  const secs = rounded % 60;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function formatElevationDelta(value) {
+  const rounded = Math.round(numberOrZero(value));
+  if (!rounded) return "-";
+  return `${rounded > 0 ? "+" : ""}${rounded} m`;
+}
+
+function formatTemperature(value) {
+  const temp = numberOrZero(value);
+  return temp ? `${Math.round(temp)} graden` : "-";
 }
 
 function renderWorkoutLongTermComparison(workout, z2Group, family) {

@@ -394,6 +394,21 @@ function compactWorkoutRawPayload(rawPayload = {}) {
     strava_activity: compactStravaActivity(rawPayload.strava_activity),
     stravaActivity: compactStravaActivity(rawPayload.stravaActivity),
     activity: compactStravaActivity(rawPayload.activity),
+    stream_summary: compactStreamSummary(rawPayload.stream_summary || rawPayload.streamSummary),
+  });
+}
+
+function compactStreamSummary(summary = {}) {
+  if (!summary || typeof summary !== "object") return undefined;
+  return compactObject({
+    available: summary.available,
+    reason: summary.reason,
+    source: summary.source,
+    windowSeconds: summary.windowSeconds,
+    sampleCount: summary.sampleCount,
+    avgTempC: summary.avgTempC,
+    avgGradePct: summary.avgGradePct,
+    chunks: Array.isArray(summary.chunks) ? summary.chunks.slice(0, 80) : undefined,
   });
 }
 

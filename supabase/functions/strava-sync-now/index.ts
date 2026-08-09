@@ -56,7 +56,15 @@ Deno.serve(async (req) => {
 
       const activity = await fetchStravaActivity(accessToken, activityId);
       const laps = await fetchStravaActivityLaps(accessToken, activityId);
-      const streams = await fetchStravaActivityStreams(accessToken, activityId, ["time", "heartrate"]);
+      const streams = await fetchStravaActivityStreams(accessToken, activityId, [
+        "time",
+        "distance",
+        "heartrate",
+        "velocity_smooth",
+        "altitude",
+        "grade_smooth",
+        "temp",
+      ]);
       const rows = mapStravaActivityToWorkoutRows(activity, laps, user.id, streams);
 
       const { error: workoutError } = await supabase
