@@ -23,6 +23,8 @@ const state = {
   passwordRecoveryMode: false,
   cloudLoaded: false,
   autoDailySyncStarted: false,
+  coachOpen: false,
+  coachMessages: [],
   workoutDetailSyncStatus: null,
   syncStatus: {
     tone: "idle",
@@ -229,6 +231,12 @@ const els = {
   intervalsPreviewButton: document.querySelector("#intervalsPreviewButton"),
   intervalsStatus: document.querySelector("#intervalsStatus"),
   intervalsStatusBadge: document.querySelector("#intervalsStatusBadge"),
+  coachFab: document.querySelector("#coachFab"),
+  coachPanel: document.querySelector("#coachPanel"),
+  coachCloseButton: document.querySelector("#coachCloseButton"),
+  coachMessages: document.querySelector("#coachMessages"),
+  coachForm: document.querySelector("#coachForm"),
+  coachInput: document.querySelector("#coachInput"),
 };
 
 const segmentTypeLabels = {
@@ -4751,7 +4759,6 @@ function renderWorkoutDetail() {
     ${shouldShowSourceDetection(selected) ? renderSourceDetection(selected) : ""}
 
     ${renderWorkoutDetailMetrics(selected)}
-    ${renderWorkoutCoachAnalysis(selected, z2Group, family)}
     ${renderWorkoutDetailStreamRefreshPanel(selected)}
     ${renderRunPaceHrStreamAnalysis(selected)}
 
@@ -4836,328 +4843,6 @@ function renderWorkoutDetailMetrics(workout) {
       ${rows.map(([label, value, meta]) => workoutDetailMetric(label, value, meta || "")).join("")}
     </section>
   `;
-}
-
-function renderWorkoutCoachAnalysis(workout, z2Group, family) {
-  const analysis = coachAnalysisForWorkout(workout, z2Group, family);
-  if (!analysis) return "";
-
-  const cards = (analysis.cards || [])
-    .filter((card) => !isEmptyDisplayValue(card.value) || !isEmptyDisplayValue(card.text))
-    .map((card) => `
-      <article class="z2-progress-card ${card.tone || ""}">
-        <span>${escapeHtml(card.label)}</span>
-        <strong>${card.value}</strong>
-        <small>${escapeHtml(card.text || "")}</small>
-      </article>
-    `).join("");
-
-  const notes = (analysis.notes || []).filter(Boolean);
-
-  return `
-    <section class="workout-detail-section">
-      <div class="workout-detail-section-header">
-        <div>
-          <strong>Coach analyse</strong>
-          <span>${escapeHtml(analysis.subtitle)}</span>
-        </div>
-      </div>
-      <div class="z2-insight-grid">
-        <section class="z2-insight-card ${analysis.tone || ""}">
-          <span>${escapeHtml(analysis.kicker || "Interpretatie")}</span>
-          <strong>${escapeHtml(analysis.title)}</strong>
-          <p>${escapeHtml(analysis.body)}</p>
-        </section>
-        <section class="z2-insight-card">
-          <span>Vergelijkingslogica</span>
-          <strong>${escapeHtml(analysis.comparisonTitle)}</strong>
-          <p>${escapeHtml(analysis.comparisonBody)}</p>
-        </section>
-      </div>
-      ${cards ? `<div class="z2-detail-grid">${cards}</div>` : ""}
-      ${notes.length ? `<ul class="coach-analysis-notes">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}
-    </section>
-  `;
-}
-
-function coachAnalysisForWorkout(workout, z2Group, family = workoutAnalysisFamily(workout)) {
-  const easyRunGroup = z2Group || getWorkoutDetailEasyRunGroup(workout, family);
-  if (easyRunGroup) return z2CoachAnalysis(workout, easyRunGroup);
-  if (family === "vo2max") return intensityCoachAnalysis(workout, "vo2");
-  if (family === "threshold") return intensityCoachAnalysis(workout, "threshold");
-  if (family === "hyrox") return hyroxCoachAnalysis(workout);
-  if (family === "strength") return strengthCoachAnalysis(workout);
-  return generalCoachAnalysis(workout, family);
-}
-
-function z2CoachAnalysis(workout, group) {
-  const selectedStats = z2StatsForGroupWorkouts([workout], group.key);
-  const matches = getZ2MatchedWorkouts(workout, group.workouts, group.key, {
-    limit: 8,
-    includeFuture: false,
-    minScore: 60,
-  });
-  const previousStats = z2StatsForGroupWorkouts(matches.map((match) => match.workout), group.key);
-  const efficiency = z2EfficiencyComparison(group.key, selectedStats, previousStats);
-  const insight = z2EfficiencyInsight(group.key, selectedStats, previousStats);
-  const { start, end } = comparisonWindowSixMonthsBefore(workout.date);
-  const sixMonthWorkouts = group.workouts.filter((candidate) => {
-    if (candidate.id === workout.id) return false;
-    const date = new Date(candidate.date);
-    return date >= start && date < end;
-  });
-  const sixMonthStats = z2StatsForGroupWorkouts(sixMonthWorkouts, group.key);
-  const sixMonthMetric = z2ComparisonMetricForGroup(group.key, selectedStats, sixMonthStats);
-  const currentMetric = group.key === "run"
-    ? formatPacePerKm(selectedStats.paceSecPerKm)
-    : group.key === "bike"
-      ? formatWatts(selectedStats.avgWatts)
-      : formatPace500(selectedStats.pace500Sec);
-  const matchMetricDelta = group.key === "run"
-    ? formatPaceDelta(selectedStats.paceSecPerKm, previousStats.paceSecPerKm)
-    : group.key === "bike"
-      ? formatWattsDelta(selectedStats.avgWatts, previousStats.avgWatts)
-      : formatErg500Delta(selectedStats.pace500Sec, previousStats.pace500Sec);
-
-  return {
-    kicker: "Z2 interpretatie",
-    title: insight.title,
-    body: insight.body,
-    tone: insight.tone,
-    subtitle: `${group.label} · pace/snelheid wordt samen met hartslag gelezen.`,
-    comparisonTitle: matches.length ? `${matches.length} vergelijkbare sessie(s)` : "Nieuwe referentie",
-    comparisonBody: matches.length
-      ? `${z2MatchSummary(matches)}. Under/overs, wedstrijden en andere trainingsvormen tellen hier niet mee.`
-      : "Deze sessie wordt vanaf nu gebruikt als referentie voor latere vergelijkbare Z2-sessies.",
-    cards: [
-      {
-        label: group.key === "run" ? "Pace" : group.key === "bike" ? "Wattage" : "Tempo /500m",
-        value: currentMetric,
-        text: matchMetricDelta,
-      },
-      {
-        label: "Hartslag",
-        value: selectedStats.avgHr ? `${Math.round(selectedStats.avgHr)} bpm` : "-",
-        text: formatHrDelta(selectedStats.avgHr, previousStats.avgHr),
-      },
-      {
-        label: "Output per hartslag",
-        value: efficiency.label || "-",
-        text: formatEfficiencyDelta(efficiency.deltaPct, previousStats.count),
-        tone: efficiency.isBetter ? "is-good" : efficiency.isWorse ? "is-warning" : "",
-      },
-      {
-        label: "Zes maanden check",
-        value: sixMonthStats.count ? sixMonthMetric.current : "-",
-        text: sixMonthStats.count
-          ? `${sixMonthMetric.delta} versus ${sixMonthMetric.baseline}`
-          : "Nog geen sessies in het 6-maanden venster.",
-      },
-    ],
-    notes: [
-      group.key === "run" ? "Bij easy runs is langzamer met lagere HR geen slechte training, maar een andere prikkel." : "",
-      "Warmte, route, ondergrond en vermoeidheid kunnen pace-HR vertekenen; streamblokken onderaan helpen dat te checken.",
-    ],
-  };
-}
-
-function intensityCoachAnalysis(workout, kind) {
-  const config = INTENSITY_ANALYSIS_RULES[kind];
-  const currentSession = {
-    workout,
-    kind,
-    profileKey: intensityProfileKey(kind, workout),
-    metrics: kind === "vo2" ? vo2SessionMetrics(workout) : thresholdSessionMetrics(workout),
-  };
-  const currentStats = intensityStats([currentSession], kind);
-  const comparable = comparableIntensitySessions(currentSession, intensitySessions(kind))
-    .filter((session) => session.workout.id !== workout.id);
-  const previousStats = intensityStats(comparable.slice(0, 8), kind);
-  const verdict = intensityProgressVerdict(kind, currentStats, previousStats);
-  const quality = analysisQualityForWorkout(workout, config.family);
-  const paceText = currentStats.avgPace ? formatPacePerKm(currentStats.avgPace) : "-";
-  const stabilityLabel = kind === "vo2" ? "Verval" : "Pace-stabiliteit";
-  const stabilityValue = kind === "vo2"
-    ? (currentStats.decaySeconds ? formatSignedPace(currentStats.decaySeconds) : "-")
-    : (currentStats.variationPct ? `${currentStats.variationPct.toFixed(1)}%` : "-");
-  const qualityText = quality.status === "bruikbaar"
-    ? "Alleen werkblokken tellen mee; rust, warming-up en cooling-down blijven buiten de analyse."
-    : `${quality.missing?.join(" ") || "Er mist nog data in deze sessie."}`;
-
-  return {
-    kicker: `${config.label} interpretatie`,
-    title: verdict.title,
-    body: `${verdict.detail} ${qualityText}`,
-    tone: verdict.tone,
-    subtitle: `${config.label} · analyse op werkblokken, niet op totale workout.`,
-    comparisonTitle: comparable.length ? `${comparable.length} eerdere ${config.label}-sessie(s)` : "Nieuwe baseline",
-    comparisonBody: comparable.length
-      ? `Vergelijking gebruikt dezelfde trainingsfamilie en profiel: ${intensityProfileLabel(currentSession.profileKey)}.`
-      : "Zodra er meer gelabelde werkblokken zijn, kan deze sessie eerlijk naast eerdere trainingen.",
-    cards: [
-      {
-        label: "Gem. werkpace",
-        value: paceText,
-        text: formatPaceDelta(currentStats.avgPace, previousStats.avgPace),
-        tone: currentStats.avgPace && previousStats.avgPace && currentStats.avgPace <= previousStats.avgPace - config.progressPaceSec ? "is-good" : "",
-      },
-      {
-        label: "Werkvolume",
-        value: formatDuration(Math.round(currentStats.durationMin)),
-        text: `${currentStats.usableRows || 0} bruikbare rep(s) · ${currentStats.distanceKm ? `${currentStats.distanceKm.toFixed(2)} km` : "afstand -"}`,
-      },
-      {
-        label: stabilityLabel,
-        value: stabilityValue,
-        text: kind === "vo2"
-          ? "Kleiner verval = reps beter volgehouden."
-          : "Lagere variatie = strakker threshold-blok.",
-      },
-      {
-        label: "Hartslag",
-        value: currentStats.avgHr ? `${Math.round(currentStats.avgHr)} bpm` : "-",
-        text: kind === "vo2" ? "HR is ondersteunend; pace en repkwaliteit zijn leidend." : formatHrDelta(currentStats.avgHr, previousStats.avgHr),
-      },
-    ],
-    notes: [
-      quality.status !== "bruikbaar" ? "Deze workout blijft in datacheck totdat de ontbrekende werkblokdata is aangevuld of bewust is uitgesloten." : "",
-      `${config.targetLabel}.`,
-    ],
-  };
-}
-
-function intensityProfileLabel(profileKey) {
-  return String(profileKey || "")
-    .replace(/^vo2-/, "VO2 ")
-    .replace(/^threshold-/, "Threshold ")
-    .replace(/-/g, " ")
-    .trim() || "standaard profiel";
-}
-
-function hyroxCoachAnalysis(workout) {
-  const previous = sortedWorkouts()
-    .filter((candidate) => candidate.id !== workout.id && workoutAnalysisFamily(candidate) === "hyrox")
-    .slice(0, 8);
-  const currentLoad = estimatedTrainingLoad(workout, "hyrox");
-  const previousLoad = average(previous.map((candidate) => estimatedTrainingLoad(candidate, "hyrox")));
-  const currentSegments = (workout.segments || []).filter((segment) => numberOrZero(segment.durationSeconds) || segment.segmentType || segment.name);
-  const currentIntervals = (workout.intervals || []).filter((interval) => numberOrZero(interval.durationSeconds));
-  const currentDuration = numberOrZero(workout.durationMin);
-  const avgPreviousDuration = average(previous.map((candidate) => numberOrZero(candidate.durationMin)));
-
-  return {
-    kicker: "HYROX interpretatie",
-    title: currentSegments.length || currentIntervals.length ? "Structuur aanwezig" : "Nog beperkte HYROX-structuur",
-    body: currentSegments.length || currentIntervals.length
-      ? "Deze workout heeft onderdelen of laps waarmee we later stations, runs en compromised running apart kunnen vergelijken."
-      : "Voor echte HYROX-analyse moeten run- en stationblokken nog expliciet gelabeld worden.",
-    tone: currentSegments.length || currentIntervals.length ? "is-neutral" : "is-warning",
-    subtitle: "HYROX · voorlopig op structuur, duur, load en RPE totdat stationanalyse af is.",
-    comparisonTitle: previous.length ? `${previous.length} eerdere HYROX-sessie(s)` : "Nieuwe HYROX-referentie",
-    comparisonBody: "HYROX wordt niet gemengd met losse ergs, kracht of normale runs. Alleen echte HYROX-sessies tellen mee.",
-    cards: [
-      {
-        label: "Duur",
-        value: currentDuration ? formatDuration(Math.round(currentDuration)) : "-",
-        text: avgPreviousDuration ? `${formatDurationDelta(currentDuration, avgPreviousDuration)}` : "Nog geen vorige HYROX-duur.",
-      },
-      {
-        label: "Load",
-        value: currentLoad || "-",
-        text: previousLoad ? `${formatSignedNumber(currentLoad - previousLoad, "load")} versus HYROX-gemiddelde` : "Nieuwe loadreferentie.",
-      },
-      {
-        label: "Onderdelen",
-        value: currentSegments.length || currentIntervals.length || "-",
-        text: currentSegments.length ? "Stations/onderdelen aanwezig." : "Gebruik laps/segmenten voor latere stationsanalyse.",
-      },
-      {
-        label: "RPE",
-        value: workoutSessionRpe(workout) ? `RPE ${workoutSessionRpe(workout)}` : "-",
-        text: "RPE maakt HYROX-load straks betrouwbaarder.",
-      },
-    ],
-    notes: [
-      "Volgende stap voor HYROX is run versus station splits apart analyseren.",
-      "Losse SkiErg/RowErg/BikeErg Z2-sessies blijven uit deze vergelijking.",
-    ],
-  };
-}
-
-function strengthCoachAnalysis(workout) {
-  const previous = sortedWorkouts()
-    .filter((candidate) => candidate.id !== workout.id && workoutAnalysisFamily(candidate) === "strength")
-    .slice(0, 8);
-  const sessionRpe = workoutSessionRpe(workout);
-  const load = estimatedTrainingLoad(workout, "strength");
-  const previousLoad = average(previous.map((candidate) => estimatedTrainingLoad(candidate, "strength")));
-  const segments = (workout.segments || []).filter((segment) => segment.name || segment.reps || segment.weightKg || segment.rpe);
-
-  return {
-    kicker: "Kracht interpretatie",
-    title: segments.length ? "Krachtdata deels aanwezig" : "Nog basisregistratie",
-    body: segments.length
-      ? "Deze training heeft losse krachtregels. Voor echte progressie missen we straks nog oefening, gewicht, sets en reps als vaste structuur."
-      : "Voor kracht tellen we nu vooral duur en RPE. Specifieke oefeningen komen later als apart krachtmodel.",
-    tone: "is-neutral",
-    subtitle: "Kracht · voorlopig geen pace-analyse, alleen RPE/load en notities.",
-    comparisonTitle: previous.length ? `${previous.length} eerdere krachtsessie(s)` : "Nieuwe krachtreferentie",
-    comparisonBody: "Kracht wordt bewust niet vergeleken met run-, erg- of HYROX-sessies.",
-    cards: [
-      {
-        label: "Sessie RPE",
-        value: sessionRpe ? `RPE ${sessionRpe}` : "-",
-        text: sessionRpe ? "Wordt gebruikt voor kracht-load." : "Vul RPE in om load zinvoller te maken.",
-      },
-      {
-        label: "Load",
-        value: load || "-",
-        text: previousLoad ? `${formatSignedNumber(load - previousLoad, "load")} versus eerdere krachttrainingen` : "Nieuwe loadreferentie.",
-      },
-      {
-        label: "Duur",
-        value: workout.durationMin ? formatDuration(numberOrZero(workout.durationMin)) : "-",
-        text: "Duur blijft zichtbaar als basiscontext.",
-      },
-      {
-        label: "Oefeningen",
-        value: segments.length || "-",
-        text: segments.length ? "Losse onderdelen opgeslagen." : "Krachtmodel staat op de backlog.",
-      },
-    ],
-    notes: [
-      "Krachtanalyse wordt later pas echt waardevol met oefening, sets, reps, gewicht en PR-historie.",
-    ],
-  };
-}
-
-function generalCoachAnalysis(workout, family) {
-  const quality = analysisQualityForWorkout(workout, family);
-  if (quality.status === "bruikbaar" && !["recovery"].includes(family)) return null;
-  const load = estimatedTrainingLoad(workout, family);
-  return {
-    kicker: "Interpretatie",
-    title: family === "recovery" ? "Herstelprikkel" : "Geen specifiek analysemodel",
-    body: family === "recovery"
-      ? "Deze training wordt als herstel gelezen. Vergelijk hem niet met Z2-progressie, VO2 of threshold."
-      : "Deze workout telt alleen als algemene logboekregel totdat hij een duidelijk analyseprofiel krijgt.",
-    tone: "is-neutral",
-    subtitle: `${analysisFamilyLabel(family)} · geen specialistisch vergelijkingsmodel actief.`,
-    comparisonTitle: "Niet gemengd vergelijken",
-    comparisonBody: "TrainIQ vergelijkt deze workout niet met Z2, VO2, threshold of HYROX om ruis te voorkomen.",
-    cards: [
-      {
-        label: "Load",
-        value: load || "-",
-        text: "Voorlopige proxy; loadmodel staat nog op de verbeterlijst.",
-      },
-      {
-        label: "Datakwaliteit",
-        value: quality.label,
-        text: [...(quality.reasons || []), ...(quality.missing || [])].join(" ") || "Geen directe actie nodig.",
-      },
-    ],
-  };
 }
 
 function renderWorkoutDetailStreamRefreshPanel(workout) {
@@ -9192,6 +8877,305 @@ function render() {
   renderAnalysis();
   renderWorkoutDetail();
   renderQuality();
+  renderCoach();
+}
+
+function renderCoach() {
+  if (!els.coachPanel || !els.coachMessages || !els.coachFab) return;
+  const appVisible = !els.appShell?.hidden;
+  els.coachFab.hidden = !appVisible;
+  els.coachPanel.hidden = !appVisible || !state.coachOpen;
+  els.coachFab.setAttribute("aria-expanded", state.coachOpen ? "true" : "false");
+  if (!appVisible) return;
+
+  if (!state.coachMessages.length) {
+    state.coachMessages = [{
+      role: "coach",
+      html: `
+        <p>Vraag mij iets over je trainingen. Ik gebruik eerst je echte laps en pas daarna totalen.</p>
+        <p class="coach-example">Voorbeeld: geef mij Z2 runs met dezelfde duur, HR, pace en HR drift.</p>
+      `,
+    }];
+  }
+
+  els.coachMessages.innerHTML = state.coachMessages.map((message) => `
+    <article class="coach-message ${message.role === "user" ? "is-user" : "is-coach"}">
+      ${message.html}
+    </article>
+  `).join("");
+  els.coachMessages.scrollTop = els.coachMessages.scrollHeight;
+}
+
+function toggleCoach(open = !state.coachOpen) {
+  state.coachOpen = open;
+  renderCoach();
+  if (open) {
+    setTimeout(() => els.coachInput?.focus(), 0);
+  }
+}
+
+function handleCoachSubmit(event) {
+  event.preventDefault();
+  const question = (els.coachInput?.value || "").trim();
+  if (!question) return;
+
+  state.coachMessages.push({
+    role: "user",
+    html: `<p>${escapeHtml(question)}</p>`,
+  });
+  state.coachMessages.push({
+    role: "coach",
+    html: answerCoachQuestion(question),
+  });
+  els.coachInput.value = "";
+  renderCoach();
+}
+
+function openWorkoutFromCoach(workoutId) {
+  if (!workoutId) return;
+  state.selectedWorkoutId = workoutId;
+  state.workoutDetailReturnView = "analysis";
+  state.coachOpen = false;
+  renderWorkoutDetail();
+  renderCoach();
+  setView("workoutDetail");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function answerCoachQuestion(question) {
+  const intent = coachIntent(question);
+  if (intent.family === "vo2") return coachIntensityAnswer("vo2", question);
+  if (intent.family === "threshold") return coachIntensityAnswer("threshold", question);
+  if (intent.family === "hyrox") return coachFamilyAnswer("hyrox", "HYROX");
+  if (intent.family === "strength") return coachFamilyAnswer("strength", "kracht");
+  return coachZ2Answer(question);
+}
+
+function coachIntent(question) {
+  const text = String(question || "").toLowerCase();
+  if (/vo2|v02|norwegian|norweigan|4x4|interval/.test(text)) return { family: "vo2" };
+  if (/threshold|treshold|drempel|tempo/.test(text)) return { family: "threshold" };
+  if (/hyrox|compromised|station|sled|wall ?ball|burpee|lunge/.test(text)) return { family: "hyrox" };
+  if (/kracht|strength|upper|lower|fullbody|legday/.test(text)) return { family: "strength" };
+  return { family: "z2" };
+}
+
+function coachZ2Answer(question) {
+  const selected = state.workouts.find((workout) => workout.id === state.selectedWorkoutId);
+  const text = String(question || "").toLowerCase();
+  const wantsBike = /bike|fiets/.test(text);
+  const wantsSki = /ski/.test(text);
+  const wantsRow = /row|roe/.test(text);
+  const groupKey = wantsBike ? "bike" : wantsSki ? "ski_erg" : wantsRow ? "row_erg" : "run";
+  const groups = getZ2Groups();
+  const group = groups.find((item) => item.key === groupKey) || groups.find((item) => item.key === "run") || groups[0];
+  const reference = selected && (group.workouts || []).some((workout) => workout.id === selected.id)
+    ? selected
+    : (group.workouts || [])[0];
+
+  if (!group || !reference) {
+    return `<p>Ik vind nog geen Z2-workouts in deze categorie. Check of workouts als Z2 zijn gelabeld en of ze uit de cloud zijn opgehaald.</p>`;
+  }
+
+  const examples = z2CoachExamples(group, reference, question);
+  const referenceText = `${formatDate(reference.date)} · ${escapeHtml(reference.title)} · ${formatDuration(numberOrZero(reference.durationMin))}`;
+
+  if (!examples.length) {
+    return `
+      <p>Ik heb geen vergelijkbare ${escapeHtml(group.label)} workouts gevonden rond dezelfde duur als ${referenceText}.</p>
+      <p>Tip: vraag breder, bijvoorbeeld “laat alle Z2 runs zien met HR drift”.</p>
+    `;
+  }
+
+  return `
+    <p>Ik gebruik <strong>${referenceText}</strong> als referentie en pak echte/gedrukte laps waar die beschikbaar zijn.</p>
+    ${coachWorkoutTable(examples, group.key)}
+    <p>${escapeHtml(z2CoachConclusion(examples, group.key))}</p>
+  `;
+}
+
+function z2CoachExamples(group, reference, question) {
+  const text = String(question || "").toLowerCase();
+  const sameDuration = /zelfde duur|gelijke duur|vergelijkbare duur|same duration/.test(text);
+  const referenceDuration = numberOrZero(reference.durationMin);
+  const maxDurationDelta = sameDuration && referenceDuration
+    ? Math.max(8, referenceDuration * 0.18)
+    : Infinity;
+
+  return (group.workouts || [])
+    .filter((workout) => workout.id !== reference.id)
+    .filter((workout) => {
+      if (!Number.isFinite(maxDurationDelta)) return true;
+      return Math.abs(numberOrZero(workout.durationMin) - referenceDuration) <= maxDurationDelta;
+    })
+    .map((workout) => coachWorkoutRow(workout, group.key))
+    .filter((row) => row.pace !== "-" || row.hr !== "-" || row.drift !== "-")
+    .sort((a, b) => {
+      const durationDelta = Math.abs(numberOrZero(a.durationMin) - referenceDuration) - Math.abs(numberOrZero(b.durationMin) - referenceDuration);
+      if (durationDelta) return durationDelta;
+      return new Date(b.date) - new Date(a.date);
+    })
+    .slice(0, 8);
+}
+
+function coachWorkoutRow(workout, groupKey = "run") {
+  const lapStats = pressedLapStats(workout, groupKey);
+  const stats = z2StatsForGroupWorkouts([workout], groupKey);
+  const pace = groupKey === "run"
+    ? formatPacePerKm(lapStats.paceSecPerKm || stats.paceSecPerKm)
+    : groupKey === "bike"
+      ? formatWatts(lapStats.avgWatts || stats.avgWatts)
+      : formatPace500(lapStats.pace500Sec || stats.pace500Sec);
+  const hr = lapStats.avgHr || stats.avgHr || validHr(workout.avgHr);
+  return {
+    id: workout.id,
+    date: workout.date,
+    title: workout.title,
+    durationMin: numberOrZero(workout.durationMin),
+    duration: formatDuration(numberOrZero(workout.durationMin)),
+    pace,
+    hr: hr ? `${Math.round(hr)} bpm` : "-",
+    drift: lapStats.hrDriftText,
+    laps: lapStats.count,
+    source: lapStats.count ? "gedrukte laps" : "workout-totaal",
+  };
+}
+
+function pressedLapStats(workout, groupKey = "run") {
+  const intervals = (workout.intervals || []).filter((interval) => {
+    if (isTransitionInterval(interval)) return false;
+    const role = String(interval.lapRole || "work").toLowerCase();
+    if (["warmup", "cooldown", "transition"].includes(role)) return false;
+    if (groupKey === "run") return !interval.exerciseType || interval.exerciseType === "run";
+    if (groupKey === "bike") return interval.exerciseType === "bike_erg";
+    return interval.exerciseType === groupKey;
+  });
+  const usable = intervals.filter((interval) => numberOrZero(interval.durationSeconds) || numberOrZero(interval.distanceMeters));
+  const hrLaps = usable.filter((interval) => validHr(interval.avgHr));
+  const firstHr = hrLaps[0] ? validHr(hrLaps[0].avgHr) : 0;
+  const lastHr = hrLaps[hrLaps.length - 1] ? validHr(hrLaps[hrLaps.length - 1].avgHr) : 0;
+  const hrDrift = firstHr && lastHr ? lastHr - firstHr : 0;
+  const totalDistanceMeters = usable.reduce((sum, interval) => sum + numberOrZero(interval.distanceMeters), 0);
+  const totalDurationSeconds = usable.reduce((sum, interval) => sum + numberOrZero(interval.durationSeconds), 0);
+  const paceSecPerKm = totalDistanceMeters && totalDurationSeconds ? totalDurationSeconds / (totalDistanceMeters / 1000) : 0;
+  const pace500Sec = groupKey !== "run" && groupKey !== "bike"
+    ? average(usable.map((interval) => secondsFromPaceText(interval.rawPayload?.manualPace500 || pace500ForInterval(interval))).filter(Boolean))
+    : 0;
+
+  return {
+    count: usable.length,
+    avgHr: average(hrLaps.map((interval) => validHr(interval.avgHr))),
+    hrDrift,
+    hrDriftText: firstHr && lastHr ? `${hrDrift > 0 ? "+" : ""}${hrDrift} bpm` : "-",
+    paceSecPerKm,
+    pace500Sec,
+    avgWatts: average(usable.map((interval) => wattsForInterval(interval))),
+  };
+}
+
+function coachWorkoutTable(rows, groupKey = "run") {
+  const metricLabel = groupKey === "run" ? "Pace" : groupKey === "bike" ? "Watt" : "/500m";
+  return `
+    <div class="coach-table">
+      <div class="coach-table-row coach-table-head">
+        <span>Datum</span>
+        <span>Workout</span>
+        <span>Duur</span>
+        <span>${metricLabel}</span>
+        <span>HR</span>
+        <span>HR drift</span>
+      </div>
+      ${rows.map((row) => `
+        <button class="coach-table-row" type="button" data-coach-open-workout="${escapeHtml(row.id)}">
+          <span>${formatDate(row.date)}</span>
+          <span><strong>${escapeHtml(row.title)}</strong><small>${row.laps || 0} lap(s) · ${row.source}</small></span>
+          <span>${row.duration}</span>
+          <span>${row.pace}</span>
+          <span>${row.hr}</span>
+          <span>${row.drift}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function z2CoachConclusion(rows, groupKey) {
+  const withDrift = rows.filter((row) => row.drift !== "-");
+  if (!rows.length) return "Nog geen conclusie mogelijk.";
+  const first = rows[0];
+  const metric = groupKey === "run" ? "pace" : groupKey === "bike" ? "wattage" : "/500m-tempo";
+  return withDrift.length
+    ? `De beste vergelijking is ${formatDate(first.date)} (${first.title}): vergelijkbare duur, ${metric} ${first.pace}, HR ${first.hr}, drift ${first.drift}.`
+    : `Ik vond vergelijkbare workouts, maar HR drift ontbreekt vaak omdat niet alle gedrukte laps hartslag hebben.`;
+}
+
+function coachIntensityAnswer(kind) {
+  const config = INTENSITY_ANALYSIS_RULES[kind];
+  const sessions = intensitySessions(kind).slice(0, 8);
+  const incomplete = intensityIncompleteSessions(kind).slice(0, 5);
+  if (!sessions.length && !incomplete.length) {
+    return `<p>Ik vind nog geen ${escapeHtml(config.label)} workouts met bruikbare werkblokken. Label eerst de werkblokken in Datacheck.</p>`;
+  }
+
+  const rows = sessions.map((session) => {
+    const stats = intensityStats([session], kind);
+    return {
+      id: session.workout.id,
+      date: session.workout.date,
+      title: session.workout.title,
+      pace: formatPacePerKm(stats.avgPace),
+      duration: formatDuration(Math.round(stats.durationMin)),
+      reps: `${stats.usableRows}/${session.metrics.reps || stats.usableRows}`,
+      drift: kind === "vo2"
+        ? (stats.decaySeconds ? formatSignedPace(stats.decaySeconds) : "-")
+        : (stats.variationPct ? `${stats.variationPct.toFixed(1)}%` : "-"),
+    };
+  });
+
+  return `
+    <p>Voor ${escapeHtml(config.label)} gebruik ik alleen werkblokken. Rust, warming-up en cooling-down tellen niet mee.</p>
+    <div class="coach-table">
+      <div class="coach-table-row coach-table-head">
+        <span>Datum</span><span>Workout</span><span>Werkpace</span><span>Werkduur</span><span>Reps</span><span>${kind === "vo2" ? "Verval" : "Stabiliteit"}</span>
+      </div>
+      ${rows.map((row) => `
+        <button class="coach-table-row" type="button" data-coach-open-workout="${escapeHtml(row.id)}">
+          <span>${formatDate(row.date)}</span><span>${escapeHtml(row.title)}</span><span>${row.pace}</span><span>${row.duration}</span><span>${row.reps}</span><span>${row.drift}</span>
+        </button>
+      `).join("")}
+    </div>
+    ${incomplete.length ? `<p>${incomplete.length} incomplete ${escapeHtml(config.label)} workout(s) staan nog in Datacheck voordat ze goed meetellen.</p>` : ""}
+  `;
+}
+
+function coachFamilyAnswer(family, label) {
+  const rows = sortedWorkouts()
+    .filter((workout) => workoutAnalysisFamily(workout) === family)
+    .slice(0, 8)
+    .map((workout) => ({
+      id: workout.id,
+      date: workout.date,
+      title: workout.title,
+      duration: workout.durationMin ? formatDuration(numberOrZero(workout.durationMin)) : "-",
+      hr: validHr(workout.avgHr) ? `${validHr(workout.avgHr)} bpm` : "-",
+      load: estimatedTrainingLoad(workout, family) || "-",
+    }));
+
+  if (!rows.length) return `<p>Ik vind nog geen ${escapeHtml(label)} workouts.</p>`;
+
+  return `
+    <p>Dit zijn de meest recente ${escapeHtml(label)} workouts. Voor deze familie is de analyse nog basis: duur, HR, load en later specifieke onderdelen.</p>
+    <div class="coach-table">
+      <div class="coach-table-row coach-table-head is-5">
+        <span>Datum</span><span>Workout</span><span>Duur</span><span>HR</span><span>Load</span>
+      </div>
+      ${rows.map((row) => `
+        <button class="coach-table-row is-5" type="button" data-coach-open-workout="${escapeHtml(row.id)}">
+          <span>${formatDate(row.date)}</span><span>${escapeHtml(row.title)}</span><span>${row.duration}</span><span>${row.hr}</span><span>${row.load}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
 }
 
 function addWorkout(formData) {
@@ -10021,6 +10005,14 @@ function setView(viewId) {
 function bindEvents() {
   els.navItems.forEach((item) => {
     item.addEventListener("click", () => setView(item.dataset.view));
+  });
+
+  els.coachFab?.addEventListener("click", () => toggleCoach(true));
+  els.coachCloseButton?.addEventListener("click", () => toggleCoach(false));
+  els.coachForm?.addEventListener("submit", handleCoachSubmit);
+  els.coachMessages?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-coach-open-workout]");
+    if (row) openWorkoutFromCoach(row.dataset.coachOpenWorkout);
   });
 
   els.workoutDetailBackButton?.addEventListener("click", () => {

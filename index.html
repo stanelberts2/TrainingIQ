@@ -16,7 +16,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=analysis-detail-v3" />
+    <link rel="stylesheet" href="./styles.css?v=coach-chat-v1" />
   </head>
   <body>
     <section class="auth-screen" id="authScreen" aria-label="Inloggen bij TrainIQ">
@@ -592,6 +592,28 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=analysis-detail-v3"></script>
+    <button class="coach-fab" id="coachFab" type="button" aria-controls="coachPanel" aria-expanded="false">
+      Coach
+    </button>
+
+    <aside class="coach-panel" id="coachPanel" hidden>
+      <div class="coach-panel-header">
+        <div>
+          <span>TrainIQ Coach</span>
+          <strong>Vraag iets over je data</strong>
+        </div>
+        <button class="ghost-button compact-button" id="coachCloseButton" type="button">Sluiten</button>
+      </div>
+      <div class="coach-messages" id="coachMessages" aria-live="polite"></div>
+      <form class="coach-form" id="coachForm">
+        <label>
+          Vraag
+          <textarea id="coachInput" rows="3" placeholder="Bijv. geef mij Z2 runs met dezelfde duur, HR, pace en HR drift"></textarea>
+        </label>
+        <button class="primary-button full-width" type="submit">Vraag stellen</button>
+      </form>
+    </aside>
+
+    <script type="module" src="./app.js?v=coach-chat-v1"></script>
   </body>
 </html>
