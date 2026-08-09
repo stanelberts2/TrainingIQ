@@ -8967,8 +8967,7 @@ function coachZ2Answer(question) {
   const wantsSki = /ski/.test(text);
   const wantsRow = /row|roe/.test(text);
   const groupKey = wantsBike ? "bike" : wantsSki ? "ski_erg" : wantsRow ? "row_erg" : "run";
-  const groups = getZ2Groups();
-  const group = groups.find((item) => item.key === groupKey) || groups.find((item) => item.key === "run") || groups[0];
+  const group = coachZ2Group(groupKey);
   const reference = selected && (group.workouts || []).some((workout) => workout.id === selected.id)
     ? selected
     : (group.workouts || [])[0];
@@ -8992,6 +8991,85 @@ function coachZ2Answer(question) {
     ${coachWorkoutTable(examples, group.key)}
     <p>${escapeHtml(z2CoachConclusion(examples, group.key))}</p>
   `;
+}
+
+function coachZ2Group(groupKey = "run") {
+  const workouts = sortedWorkouts().filter((workout) => isCoachStrictZ2Workout(workout, groupKey));
+  const labels = {
+    run: "schone Z2 hardloopruns",
+    bike: "schone Z2 BikeErg/fietssessies",
+    ski_erg: "schone Z2 SkiErg-blokken",
+    row_erg: "schone Z2 RowErg-blokken",
+  };
+  return {
+    key: groupKey,
+    label: labels[groupKey] || "schone Z2-sessies",
+    workouts,
+  };
+}
+
+function isCoachStrictZ2Workout(workout, groupKey = "run") {
+  if (!workout || isExcludedFromZ2Analysis(workout) || isWorkoutExcludedFromAnalysis(workout)) return false;
+  const context = workout.rawPayload?.reviewContext || {};
+  const override = String(context.overrideAnalysisFamily || "").toLowerCase();
+  const goal = String(context.trainingGoal || "").toLowerCase();
+  const category = String(context.bulkCategory || "").toLowerCase();
+  const type = String(workout.workoutType || "").toLowerCase();
+  const title = String(workout.title || "").toLowerCase();
+  const structure = String(context.structureText || "").toLowerCase();
+  const haystack = `${title} ${type} ${goal} ${category} ${structure}`;
+
+  if (override && override !== "z2") return false;
+  if (goal === "z2_under_overs" || category === "z2_under_overs" || category === "threshold_under_overs") return false;
+  if ([
+    "vo2max",
+    "threshold",
+    "threshold_under_overs",
+    "run_endurance_progressive",
+    "run_hill_sprints",
+    "erg_intervals",
+    "hyrox",
+    "hyrox_race",
+    "compromised_running",
+    "strength",
+  ].includes(category)) return false;
+  if (/(vo2|v02|threshold|treshold|drempel|\btempo\b|progressive|interval|norwegian|norweigan|4x4|4\s*x\s*4|hyrox|wedstrijd|race|compromi[sz]ed|hill sprint)/.test(haystack)) {
+    return false;
+  }
+
+  const explicitZ2 = override === "z2"
+    || goal === "z2"
+    || goal === "recovery"
+    || ["z2_general", "bike_z2", "erg_z2", "shakeout"].includes(category)
+    || type === "z2"
+    || type === "erg_z2"
+    || /(zone 2|z2|easy|recovery|herstel|shakeout)/.test(haystack);
+  if (!explicitZ2) return false;
+
+  if (groupKey === "run") return isCoachStrictZ2Run(workout);
+  if (groupKey === "bike") return z2Subtype(workout) === "bike" || hasCoachZ2Component(workout, "bike_erg");
+  if (groupKey === "ski_erg") return hasCoachZ2Component(workout, "ski_erg");
+  if (groupKey === "row_erg") return hasCoachZ2Component(workout, "row_erg");
+  return true;
+}
+
+function isCoachStrictZ2Run(workout) {
+  if (workout.sport !== "running") return false;
+  if (z2Subtype(workout) !== "run") return false;
+  if (["ski_erg", "row_erg", "bike_erg"].some((type) => hasCoachZ2Component(workout, type))) return false;
+  return true;
+}
+
+function hasCoachZ2Component(workout, componentType) {
+  const context = workout.rawPayload?.reviewContext || {};
+  const category = String(context.bulkCategory || "").toLowerCase();
+  if (componentType === "bike_erg" && category === "bike_z2") return true;
+  if (["ski_erg", "row_erg", "bike_erg"].includes(componentType) && category === "erg_z2") return true;
+  return (workout.intervals || []).some((interval) => (
+    interval.exerciseType === componentType
+    && !isTransitionInterval(interval)
+    && ["", "z2", "recovery"].includes(String(interval.effortGoal || "").toLowerCase())
+  ));
 }
 
 function z2CoachExamples(group, reference, question) {
