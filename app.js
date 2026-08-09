@@ -23,6 +23,7 @@ const state = {
   passwordRecoveryMode: false,
   cloudLoaded: false,
   autoDailySyncStarted: false,
+  workoutDetailSyncStatus: null,
   syncStatus: {
     tone: "idle",
     title: "Lokale basis actief",
@@ -4750,6 +4751,7 @@ function renderWorkoutDetail() {
     ${shouldShowSourceDetection(selected) ? renderSourceDetection(selected) : ""}
 
     ${renderWorkoutDetailMetrics(selected)}
+    ${renderWorkoutDetailStreamRefreshPanel(selected)}
     ${renderRunPaceHrStreamAnalysis(selected)}
 
     ${renderWorkoutLongTermComparison(selected, z2Group, family)}
@@ -4831,6 +4833,31 @@ function renderWorkoutDetailMetrics(workout) {
   return `
     <section class="workout-detail-grid">
       ${rows.map(([label, value, meta]) => workoutDetailMetric(label, value, meta || "")).join("")}
+    </section>
+  `;
+}
+
+function renderWorkoutDetailStreamRefreshPanel(workout) {
+  if (!canRefreshStravaLaps(workout)) return "";
+  const summary = workout.rawPayload?.stream_summary || workout.rawPayload?.streamSummary;
+  const hasStreamSummary = Boolean(summary?.available && Array.isArray(summary.chunks) && summary.chunks.length);
+  const status = state.workoutDetailSyncStatus;
+  const statusHtml = status && status.workoutId === workout.id
+    ? `<div class="summary-card ${status.tone === "error" ? "is-error" : ""}"><strong>${escapeHtml(status.title)}</strong><span>${escapeHtml(status.text || "")}</span></div>`
+    : "";
+
+  return `
+    <section class="workout-detail-section">
+      <div class="workout-detail-section-header">
+        <div>
+          <strong>Pace-HR data</strong>
+          <span>${hasStreamSummary ? `${summary.chunks.length} blokken met streamdata beschikbaar.` : "Nog geen pace-HR streamanalyse opgeslagen voor deze workout."}</span>
+        </div>
+        <button class="ghost-button compact-button" type="button" data-detail-refresh-streams>
+          ${hasStreamSummary ? "Streamdata opnieuw ophalen" : "Pace-HR data ophalen"}
+        </button>
+      </div>
+      ${statusHtml}
     </section>
   `;
 }
@@ -6990,6 +7017,60 @@ async function refreshWorkoutLapsFromStrava(workoutId) {
     updateQualitySaveStatus(`${result?.laps || 0} lap(s) opnieuw uit Strava opgehaald voor ${workout.title || "de workout"}.`, "ready");
   } catch (error) {
     updateQualitySaveStatus(`Laps ophalen mislukt: ${error.message}`, "error");
+  }
+}
+
+async function refreshSelectedWorkoutStreamsFromStrava() {
+  const workout = state.workouts.find((item) => item.id === state.selectedWorkoutId);
+  const activityId = stravaActivityIdForWorkout(workout);
+  if (!workout || !activityId) {
+    state.workoutDetailSyncStatus = {
+      workoutId: state.selectedWorkoutId,
+      tone: "error",
+      title: "Geen Strava ID gevonden",
+      text: "Deze workout kan niet automatisch opnieuw worden verrijkt.",
+    };
+    renderWorkoutDetail();
+    return;
+  }
+
+  try {
+    state.workoutDetailSyncStatus = {
+      workoutId: workout.id,
+      tone: "idle",
+      title: "Pace-HR data ophalen...",
+      text: "Training wordt opnieuw uit Strava opgehaald met streams.",
+    };
+    renderWorkoutDetail();
+
+    const user = await ensureSupabaseUser();
+    if (!user) throw new Error("Login eerst bij Supabase.");
+
+    const { importStravaActivity, loadSupabaseWorkouts } = await loadSupabaseModule();
+    const { result, error } = await importStravaActivity(activityId);
+    if (error) throw error;
+
+    const { workouts, error: loadError } = await loadSupabaseWorkouts();
+    if (loadError) throw loadError;
+
+    state.workouts = normalizeAppWorkouts(workouts);
+    saveWorkouts(state.workouts);
+    state.selectedWorkoutId = workout.id;
+    state.workoutDetailSyncStatus = {
+      workoutId: workout.id,
+      tone: "ready",
+      title: "Pace-HR data bijgewerkt",
+      text: `${result?.laps || 0} lap(s) en streamanalyse opnieuw opgehaald.`,
+    };
+    render();
+  } catch (error) {
+    state.workoutDetailSyncStatus = {
+      workoutId: workout.id,
+      tone: "error",
+      title: "Pace-HR data ophalen mislukt",
+      text: error.message,
+    };
+    renderWorkoutDetail();
   }
 }
 
@@ -9648,6 +9729,11 @@ function bindEvents() {
 
     if (event.target.closest("[data-detail-mark-complete]")) {
       handleWorkoutDetailMarkComplete();
+      return;
+    }
+
+    if (event.target.closest("[data-detail-refresh-streams]")) {
+      refreshSelectedWorkoutStreamsFromStrava();
       return;
     }
 
