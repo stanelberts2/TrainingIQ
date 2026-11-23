@@ -23,6 +23,7 @@ const state = {
   passwordRecoveryMode: false,
   cloudLoaded: false,
   autoDailySyncStarted: false,
+  stravaSyncInProgress: false,
   coachOpen: false,
   coachMessages: [],
   workoutDetailSyncStatus: null,
@@ -7592,7 +7593,17 @@ async function handleStravaConnect() {
   }
 }
 
+// One Strava import at a time: repeated clicks and the daily job must not race.
+function setStravaSyncBusy(busy) {
+  state.stravaSyncInProgress = busy;
+  [els.stravaSyncNowButton, els.stravaSyncHistoryButton, els.dailySyncButton]
+    .filter(Boolean)
+    .forEach((button) => { button.disabled = busy; });
+}
+
 async function handleStravaSyncNow(mode = "recent") {
+  if (state.stravaSyncInProgress) return;
+  setStravaSyncBusy(true);
   try {
     const user = await requireSupabaseUserForSync("strava");
     if (!user) return;
@@ -7625,10 +7636,14 @@ async function handleStravaSyncNow(mode = "recent") {
     );
   } catch (error) {
     updateStravaStatus(explainSyncError(error), "Controleer je Strava permissies en probeer opnieuw.", "error");
+  } finally {
+    setStravaSyncBusy(false);
   }
 }
 
 async function handleDailySync(options = {}) {
+  if (state.stravaSyncInProgress) return;
+  setStravaSyncBusy(true);
   try {
     const user = await requireSupabaseUserForSync("both");
     if (!user) return;
@@ -7662,6 +7677,8 @@ async function handleDailySync(options = {}) {
     const detail = explainSyncError(error);
     updateStravaStatus(options.automatic ? "Automatische sync mislukt." : "Dagelijkse sync mislukt.", detail, "error");
     updateIntervalsStatus(options.automatic ? "Automatische sync mislukt." : "Dagelijkse sync mislukt.", detail, "error");
+  } finally {
+    setStravaSyncBusy(false);
   }
 }
 
